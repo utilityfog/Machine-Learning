@@ -4,8 +4,9 @@ from sklearn.compose import ColumnTransformer
 import numpy as np
 
 def main():
-    # print("This is the driver code for running and using the heart attack predictor model.")
     df = pd.read_csv('randhie.csv')
+    categorical_variables = ['plan', 'site', 'black', 'female', 'mhi', 'child', 'fchild', 'hlthg', 'hlthf', 'hlthp']
+    numerical_variables = ['zper','coins', 'tookphys', 'year', 'income', 'xage', 'educdec', 'time','outpdol','drugdol','suppdol','mentdol','inpdol','meddol','totadm','inpmis','mentvis','mdvis','notmdvis','num','disea','physlm','ghindx','mdeoff','pioff','lfam','lpi','idp','logc','fmde','xghindx','linc','lnum','lnmeddol','binexp']
     print("ORIGINAL")
     print(df.head())
     
@@ -13,13 +14,15 @@ def main():
     avg_df = average_time_series(df, "zper")
     print(avg_df.head())
 
-    print('STANDARDIZED')
-    standardized_df = standardize_df(avg_df)
+    print('STANDARDIZED - NEW')
+    # standardized_df = standardize_df(avg_df)
+    standardized_df = standardize_dataframe(avg_df, numerical_variables, categorical_variables)
     print(standardized_df.head())
 
-    print('STANDARDIZED (CATEGORICAL VARS)')
-    categorical_variables = ['plan', 'site', 'black', 'female', 'mhi', 'child', 'fchild', 'hlthg', 'hlthf', 'hlthp']
-    encoded_df = encode_categorical(standardized_df, categorical_variables)
+    print('ONE HOT ENCODING (CATEGORICAL VARS)')
+    # Excluding plan from our list of categorical variables because there is linearity in its categories(1-6)
+    cat_vars_no_plan = ['site', 'black', 'female', 'mhi', 'child', 'fchild', 'hlthg', 'hlthf', 'hlthp']
+    encoded_df = encode_categorical(standardized_df, cat_vars_no_plan)
     print(encoded_df)
 
     print('PROCESSED')
@@ -44,32 +47,35 @@ def average_time_series(df, id_column):
     return result
 
 
-def standardize_df(df):
+def standardize_dataframe(df, numerical_columns, exclude_columns):
     """
-    A function to standardize all the values in a DataFrame using z-score normalization,
-    excluding the column containing unique identifiers (user ID column).
+    A function to standardize specified numerical values in a DataFrame using z-score normalization,
+    excluding specified columns.
     
     Parameters:
         df (pandas DataFrame): The input DataFrame.
-        id_column (str): The name of the column containing unique identifiers.
+        numerical_columns (list): A list of numerical column names to standardize.
+        exclude_columns (list): A list of column names to exclude from standardization.
         
     Returns:
-        pandas DataFrame: A DataFrame with standardized values.
+        pandas DataFrame: A DataFrame with standardized numerical values.
     """
-    # Copy the DataFrame excluding the ID column
-    df_to_standardize = df.drop(columns=["zper"])
+    # Exclude columns specified in exclude_columns
+    columns_to_standardize = [col for col in numerical_columns if col not in exclude_columns]
     
     # Initialize the StandardScaler
     scaler = StandardScaler()
     
-    # Fit the scaler to the DataFrame and transform the values
-    standardized_values = scaler.fit_transform(df_to_standardize.values)
+    # Fit the scaler to the selected columns and transform the values
+    standardized_values = scaler.fit_transform(df[columns_to_standardize])
     
     # Create a new DataFrame with the standardized values and the same index and columns as the original DataFrame
-    standardized_df = pd.DataFrame(standardized_values, index=df.index, columns=df_to_standardize.columns)
+    standardized_df = pd.DataFrame(standardized_values, index=df.index, columns=columns_to_standardize)
     
-    # Add back the ID column to the standardized DataFrame
-    standardized_df["zper"] = df["zper"]
+    # Combine the standardized numerical columns with non-numerical columns from the original DataFrame
+    for col in df.columns:
+        if col not in columns_to_standardize:
+            standardized_df[col] = df[col]
     
     return standardized_df
 
