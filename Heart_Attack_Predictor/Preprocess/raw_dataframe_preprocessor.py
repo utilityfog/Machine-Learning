@@ -181,6 +181,8 @@ class RANDHIE:
         # Add plan without standardization
         standardized_df['plan'] = collapsed_df['plan']
         
+        # Combine standardized_df's child and fchild into one categorical column as they are redundant
+        
         # One Hot Encoding categorical variables
         encoded_df = encode_categorical(standardized_df, new_categorical_columns)
         print(f"ONE HOT ENCODED (CATEGORICAL VARS): {encoded_df.head()}")
