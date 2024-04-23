@@ -160,7 +160,7 @@ class RANDHIE:
         print(f"DataFrame after removing NaN and inf values: {df_cleaned.head()}")
         
         # Average the numeric column values at the patient (zper) level since we are not interested in time and the RANDHIE experiment has 5 individual year observations for each patient
-        collapsed_df = self.average_by_unique_patient(df_cleaned, "zper") # Only average numeric columns when collapsing!!
+        collapsed_df = self.average_by_unique_patient(df_cleaned, "zper", RANDHIE_CATEGORICAL_VARIABLES) # Only average numeric columns when collapsing!!
         print(f"AVERAGED: {collapsed_df.head()}")
         
         # Re-Constructing Variables for the Four Equations from the Paper (must be done before standardization as it is affected by sign): ""
@@ -182,6 +182,16 @@ class RANDHIE:
         standardized_df['plan'] = collapsed_df['plan']
         
         # Combine standardized_df's child and fchild into one categorical column as they are redundant
+        # Create a new categorical column combining 'child' and 'fchild'
+        conditions = [
+            (standardized_df['child'] == 1) & (standardized_df['fchild'] == 0),
+            (standardized_df['child'] == 1) & (standardized_df['fchild'] == 1),
+            (standardized_df['child'] == 0)
+        ]
+        choices = ['mchild', 'fchild', 'adult']
+        standardized_df['person_type'] = np.select(conditions, choices, default='adult')
+        
+        new_categorical_columns.append('person_type')
         
         # One Hot Encoding categorical variables
         encoded_df = encode_categorical(standardized_df, new_categorical_columns)
@@ -190,12 +200,14 @@ class RANDHIE:
         # Replacing the randhie df's categorical variables with one hot encoded variables
         processed_df = replace_encoded_categorical(standardized_df, encoded_df, new_categorical_columns)
         print(f"PROCESSED: {processed_df.head()}")
+        
+        # Drop the original 'child' and 'fchild' columns as no longer needed
+        processed_df.drop(['child', 'fchild'], axis=1, inplace=True)
 
         # Define independent variables based on the paper's model and available data: 
             # Excluding variables that are known to be endogenous (e.g. if someone makes a lot of hospital visits, obviously it will have a positive causal relationship with their quantity demanded for medical care even if there are confounding variables that may affect the number of times they visit the hospital)
             # Excluding variables that are a deterministic function of another to prevent perfect multicolinearity; no inclusion of both linc and income
-            # preprocess child into one categorical variable column
-        X_list = ['plan', 'tookphys', 'xage', 'educdec', 'time', 'disea', 'physlm', 'mdeoff', 'lfam', 'lpi', 'logc', 'xghindx', 'linc', 'lnum', 'site', 'black', 'female', 'mhi', 'hlthg', 'hlthf', 'hlthp']
+        X_list = ['person_type', 'plan', 'tookphys', 'xage', 'educdec', 'time', 'disea', 'physlm', 'mdeoff', 'lfam', 'lpi', 'logc', 'xghindx', 'linc', 'lnum', 'site', 'black', 'female', 'mhi', 'hlthg', 'hlthf', 'hlthp']
         X = processed_df[X_list]
         X = sm.add_constant(X)  # Adds an intercept term
         
@@ -227,21 +239,40 @@ class RANDHIE:
         print(model_4.summary())
         
         return processed_df
-        
-    def average_by_unique_patient(self, df, id_column):
+    
+    def average_by_unique_patient(self, df: pd.DataFrame, id_column: str, categorical_cols=[]):
         """
-        A function to average attributes of a time series dataset by a unique ID.
+        A function to average attributes of a time series dataset by a unique ID, 
+        averaging true numeric columns and randomly selecting values for categorical columns.
         
         Parameters:
             df (pandas DataFrame): The input dataset.
             id_column (str): The name of the column containing unique IDs.
-            attribute_columns (list): A list of column names containing attributes to be averaged.
+            categorical_cols (list): A list of column names that are categorical but represented numerically.
             
         Returns:
-            pandas DataFrame: A DataFrame with averaged rows, indexed by unique ID.
+            pandas DataFrame: A DataFrame with averaged numeric columns and randomly selected categorical columns, indexed by unique ID.
         """
-        attributes = df.columns.tolist()
-        result = df.groupby(id_column)[attributes].mean()
+        # Identify numeric columns (excluding categorical ones)
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        numeric_cols = [col for col in numeric_cols if col not in categorical_cols and col != id_column]
+        
+        # Non-numeric columns are either categorical or explicitly excluded from numeric
+        non_numeric_cols = df.select_dtypes(exclude=[np.number]).columns.tolist() + categorical_cols
+        non_numeric_cols = [col for col in non_numeric_cols if col != id_column]
+        
+        # Group by ID and compute the mean for numeric columns
+        if numeric_cols:
+            df_numeric_mean = df.groupby(id_column)[numeric_cols].mean()
+        else:
+            df_numeric_mean = pd.DataFrame(index=df[id_column].unique())
+
+        # Group by ID and randomly select a value for non-numeric columns
+        df_non_numeric_random = df.groupby(id_column)[non_numeric_cols].agg(lambda x: np.random.choice(x.dropna()))
+
+        # Combine the results
+        result = pd.concat([df_numeric_mean, df_non_numeric_random], axis=1)
+        
         return result
     
 class HEART:
