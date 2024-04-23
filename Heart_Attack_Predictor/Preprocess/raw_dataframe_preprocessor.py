@@ -263,14 +263,15 @@ class RANDHIE:
             # Excluding variables that are known to be endogenous (e.g. if someone makes a lot of hospital visits, obviously it will have a positive causal relationship with their quantity demanded for medical care even if there are confounding variables that may affect the number of times they visit the hospital)
             # Excluding variables that are a deterministic function of another to prevent perfect multicolinearity; no inclusion of both linc and income
         X_list = ['person_type_adult', 'person_type_fchild', 'person_type_mchild', 'hlthg_0', 'hlthg_1', 'hlthf_0',	'hlthf_1', 'hlthp_0', 'hlthp_1', 'female_0', 'female_1', 'site_2', 'site_3', 'site_4', 'site_5', 'site_6', 'plan', 'tookphys', 'xage', 'educdec', 'time', 'disea', 'physlm', 'mdeoff', 'lfam', 'lpi', 'logc', 'xghindx', 'linc', 'lnum', 'black', 'mhi']
-        FINAL_RANDHIE_REGRESSORS = X_list
         X = processed_df[X_list]
-        print(X)
+        # print(f"randhie final X: {X}") # The ordering of the columns specified in X_list must be preserved!!
         X = sm.add_constant(X)  # Adds an intercept term
         
-        # FOUR EQUATION MODEL ACCORDING TO PAPER: Health Insurance and the Demand for Medical Care
-        
+        # Store both final X_list (order preserved) and final y variables in global lists
+        FINAL_RANDHIE_REGRESSORS = X_list
         FINAL_RANDHIE_Y = ['is_positive_med_exp_1', 'is_positive_inpatient_exp_1', 'log_med_exp', 'log_inpatient_exp']
+        
+        # FOUR EQUATION MODEL ACCORDING TO PAPER: Health Insurance and the Demand for Medical Care
 
         # Equation 1: Probit model for zero versus positive medical expenses
         model_1 = Probit(processed_df['is_positive_med_exp_1'], X).fit() # LASSO
