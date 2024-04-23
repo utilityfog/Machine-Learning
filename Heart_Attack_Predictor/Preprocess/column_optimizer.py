@@ -6,8 +6,8 @@ from statsmodels.discrete.discrete_model import Probit
 from statsmodels.api import OLS
 import statsmodels.api as sm
 
-from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.preprocessing import LabelEncoder, StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 
 from scipy.optimize import linear_sum_assignment
@@ -30,22 +30,39 @@ class ColumnRearranger:
         
         # Initialize cost matrix
         cost_matrix = np.zeros((n, m))
-        
-        # Calculate negative correlation coefficients to fill the cost matrix
+        label_encoders = {col: LabelEncoder().fit(df_left[col]) for col in X_left if df_left[col].dtype == object}
+
+        # Calculate correlation coefficients to fill the cost matrix
         for i, col_left in enumerate(X_left):
             for j, col_right in enumerate(X_right):
-                if df_right[col_right].dtype.kind in 'oi' and df_left[col_left].dtype.kind in 'oi':
-                    # Handle non-numeric columns or use appropriate encoding/transformations
-                    continue
-                model = LinearRegression().fit(df_right[[col_right]], df_left[[col_left]])
+                # Determine if the target column is categorical with more than two categories
+                if df_left[col_left].dtype == object or len(df_left[col_left].unique()) > 2:
+                    # Assume categorical data is properly encoded or encode it as needed
+                    if df_left[col_left].dtype == object:
+                        y = label_encoders[col_left].transform(df_left[col_left])
+                    else:
+                        y = df_left[col_left]
+
+                    model = LogisticRegression(multi_class='multinomial', solver='lbfgs', max_iter=1000)
+                else:
+                    model = LinearRegression()
+
+                model.fit(df_right[[col_right]], y)
                 prediction = model.predict(df_right[[col_right]])
-                corr, _ = pearsonr(prediction.flatten(), df_left[col_left])
-                cost_matrix[i, j] = -corr  # Use negative correlation because we minimize in Hungarian
-        
+
+                if isinstance(model, LogisticRegression):
+                    # Use R^2 as the correlation measure for categorical outcomes
+                    score = model.score(df_right[[col_right]], y)
+                    corr = 2 * score - 1  # Rescale R^2 to range from -1 to 1
+                else:
+                    corr, _ = pearsonr(prediction.flatten(), y)
+
+                cost_matrix[i, j] = -corr  # Use negative correlation because we minimize
+
         # Apply the Hungarian algorithm
         row_ind, col_ind = linear_sum_assignment(cost_matrix)
 
-        # Create a new DataFrame with columns rearranged according to the optimal assignment
+        # Rearrange columns according to the optimal assignment
         rearranged_columns = [X_right[idx] for idx in col_ind]
         rearranged_df_right = df_right[rearranged_columns].copy()
 
