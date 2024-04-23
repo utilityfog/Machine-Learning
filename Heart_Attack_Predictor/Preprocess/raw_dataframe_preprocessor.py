@@ -217,7 +217,7 @@ class RANDHIE:
         paper_variables_numeric = ['log_med_exp', 'log_inpatient_exp']
         print(f"processed_df's generated columns: {collapsed_df[paper_variables_numeric + paper_variables_categorical].head()}")
         # Test 2
-        # save_dataframe(collapsed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed2.csv")
+        save_dataframe(collapsed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed2.csv")
         
         # Standardize Numeric Columns: standardized_df = standardize_df(avg_df)
         new_numeric_columns = RANDHIE_NUMERIC_VARIABLES + paper_variables_numeric
@@ -265,6 +265,7 @@ class RANDHIE:
         X_list = ['person_type_adult', 'person_type_fchild', 'person_type_mchild', 'hlthg_0', 'hlthg_1', 'hlthf_0',	'hlthf_1', 'hlthp_0', 'hlthp_1', 'female_0', 'female_1', 'site_2', 'site_3', 'site_4', 'site_5', 'site_6', 'plan', 'tookphys', 'xage', 'educdec', 'time', 'disea', 'physlm', 'mdeoff', 'lfam', 'lpi', 'logc', 'xghindx', 'linc', 'lnum', 'black', 'mhi']
         FINAL_RANDHIE_REGRESSORS = X_list
         X = processed_df[X_list]
+        print(X)
         X = sm.add_constant(X)  # Adds an intercept term
         
         # FOUR EQUATION MODEL ACCORDING TO PAPER: Health Insurance and the Demand for Medical Care
