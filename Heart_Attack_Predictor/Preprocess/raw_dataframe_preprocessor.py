@@ -2,6 +2,8 @@ import os
 from typing import List
 import pandas as pd
 import numpy as np
+import torch
+import torch.nn as nn
 
 from statsmodels.discrete.discrete_model import Probit
 from statsmodels.api import OLS
@@ -9,11 +11,12 @@ import statsmodels.api as sm
 
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
-
-from .globals import RANDHIE_CATEGORICAL_VARIABLES, RANDHIE_NUMERIC_VARIABLES, HEART_CATEGORICAL_VARIABLES, HEART_NUMERIC_VARIABLES
-
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
+
+from torch.utils.data import DataLoader, TensorDataset
+
+from .globals import RANDHIE_CATEGORICAL_VARIABLES, RANDHIE_NUMERIC_VARIABLES, HEART_CATEGORICAL_VARIABLES, HEART_NUMERIC_VARIABLES
 
 FINAL_RANDHIE_REGRESSORS = []
 FINAL_RANDHIE_Y = []
@@ -354,6 +357,12 @@ class HEART:
         """
         Method that pre-processes the heart_attack_prediction.csv dataset
         
+        CleaningDecisions:
+        1. Seperate Systolic and Diastolic blood pressure into seperate columns 
+        2. Create an interaction term between systolic and diastolic.
+        3. Drop 'Sex_Male', 'Diet_Average', 'Country_Argentina' to prevent multicolinearity.
+        4. Set categorical variables to category type.
+        
         Returns: pd.DataFrame
         """
         # Read
@@ -410,15 +419,41 @@ class HEART:
         return processed_df
 
 class oos_testing:
-    def split_test_train_data(self, df, target_column, test_size=0.2, random_state=42):
+    def split_test_train_data(self, df: pd.DataFrame, target_column, test_size=0.2, random_state=42):
         """
         Perform out-of-sample testing by dividing the dataset into training and testing data.
         """
-        # Extract features (X) and target variable (y)
-        X = df.drop(columns=[target_column])
+        # Separate the target variable (y) and the features (X)
+        X = df.drop(target_column, axis=1)
         y = df[target_column]
-        
-        # Split the dataset into training and testing data
+
+        # Normalize the data
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        # Split the data into training and testing sets
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=random_state)
         
-        return X_train, X_test, y_train, y_test
+        # Make PyTorch Tensors from numpy arrays or pandas DataFrames
+        X_train_tensor = torch.tensor(X_train.values.astype(np.float32)) if isinstance(X_train, pd.DataFrame) else torch.tensor(X_train.astype(np.float32))
+        y_train_tensor = torch.tensor(y_train.values.astype(np.int64)) if isinstance(y_train, pd.Series) else torch.tensor(y_train.astype(np.int64))
+        X_test_tensor = torch.tensor(X_test.values.astype(np.float32)) if isinstance(X_test, pd.DataFrame) else torch.tensor(X_test.astype(np.float32))
+        y_test_tensor = torch.tensor(y_test.values.astype(np.int64)) if isinstance(y_test, pd.Series) else torch.tensor(y_test.astype(np.int64))
+
+        # Define datasets and DataLoader
+        train_dataset = TensorDataset(X_train, y_train)
+        val_dataset = TensorDataset(X_test, y_test)
+        train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
+        print("Training dataset shape:", X_train.shape, y_train.shape)
+        print("Validation dataset shape:", X_test.shape, y_test.shape)
+        print("Training dataset type:", type(X_train), type(y_train))
+        print("Validation dataset type:", type(X_test), type(y_test))
+        print('')
+        print("Object type of current x and y variables:", type(X_train))
+        print("Shape of X_train:", X_train.shape)
+        print("Shape of X_test:", X_test.shape)
+        print("Shape of y_train:", y_train.shape)
+        print("Shape of y_test:", y_test.shape)
+
+        return X_train, X_test, y_train, y_test, X_train_tensor, X_test_tensor, y_train_tensor, y_test_tensor, train_loader, val_loader
