@@ -12,6 +12,9 @@ from sklearn.compose import ColumnTransformer
 
 from .globals import RANDHIE_CATEGORICAL_VARIABLES, RANDHIE_NUMERIC_VARIABLES, HEART_CATEGORICAL_VARIABLES, HEART_NUMERIC_VARIABLES
 
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+
 FINAL_RANDHIE_REGRESSORS = []
 FINAL_RANDHIE_Y = []
 
@@ -224,7 +227,7 @@ class RANDHIE:
         
         # Standardize Numeric Columns: standardized_df = standardize_df(avg_df)
         new_numeric_columns = RANDHIE_NUMERIC_VARIABLES + paper_variables_numeric
-        new_categorical_columns = RANDHIE_CATEGORICAL_VARIABLES + paper_variables_categorical
+        new_categorical_columns = RANDHIE_CATEGORICAL_VARIABLES
         standardized_df = standardize_dataframe(collapsed_df, new_numeric_columns, new_categorical_columns)
         print(f"STANDARDIZED - NEW: {standardized_df.head()}")
         # Add plan without standardization
@@ -273,30 +276,34 @@ class RANDHIE:
         
         # Store both final X_list (order preserved) and final y variables in global lists
         FINAL_RANDHIE_REGRESSORS = X_list
-        FINAL_RANDHIE_Y = ['is_positive_med_exp_1', 'is_positive_inpatient_exp_1', 'log_med_exp', 'log_inpatient_exp']
+        FINAL_RANDHIE_Y = ['is_positive_med_exp', 'is_positive_inpatient_exp', 'log_med_exp', 'log_inpatient_exp']
         
-        # FOUR EQUATION MODEL ACCORDING TO PAPER: Health Insurance and the Demand for Medical Care
+        # THREE EQUATION MODEL ACCORDING TO PAPER: Health Insurance and the Demand for Medical Care
 
-        # Equation 1: Probit model for zero versus positive medical expenses
-        model_1 = Probit(processed_df['is_positive_med_exp_1'], X).fit() # LASSO
+        # # Equation 1: Lasso model for zero versus positive medical expenses
+        # # model_1 = Probit(processed_df['is_positive_med_exp_1'], X).fit() # LASSO
+        # lasso_log_model_1 = LogisticRegression(penalty='l1', solver='liblinear')
+        # lasso_log_model_1.fit(X, processed_df['is_positive_med_exp'])
 
-        # Equation 2: Probit model for having zero versus positive inpatient expense, given positive use of medical services
-        df_pos_med_exp = processed_df[processed_df['is_positive_med_exp_1'] == 1]  # Filter for positive medical use
-        model_2 = Probit(df_pos_med_exp['is_positive_inpatient_exp_1'], X.loc[df_pos_med_exp.index]).fit() # LASSO
+        # Equation 2: Lasso model for having zero versus positive inpatient expense, given positive use of medical services
+        df_pos_med_exp = processed_df[processed_df['is_positive_med_exp'] == 1]  # Filter for positive medical use
+        # model_2 = Probit(df_pos_med_exp['is_positive_inpatient_exp_1'], X.loc[df_pos_med_exp.index]).fit() # LASSO
+        lasso_log_model_2 = LogisticRegression(penalty='l1', solver='liblinear')
+        lasso_log_model_2.fit(X, df_pos_med_exp['is_positive_inpatient_exp'])
 
         # Equation 3: OLS regression for log of positive medical expenses if only outpatient services are used
-        df_only_outpatient_exp = processed_df[processed_df['is_only_outpatient_exp_1'] == 1]
+        df_only_outpatient_exp = processed_df[processed_df['is_only_outpatient_exp'] == 1]
         model_3 = OLS(df_only_outpatient_exp['log_med_exp'], X.loc[df_only_outpatient_exp.index]).fit()
 
         # Equation 4: OLS regression for log of medical expenses for those with any inpatient expenses
-        df_pos_inpatient_exp = processed_df[processed_df['is_positive_inpatient_exp_1'] == 1]
+        df_pos_inpatient_exp = processed_df[processed_df['is_positive_inpatient_exp'] == 1]
         model_4 = OLS(df_pos_inpatient_exp['log_inpatient_exp'], X.loc[df_pos_inpatient_exp.index]).fit()
 
         # Print summaries of the models
-        print("Model 1: Probit model for zero versus positive medical expenses")
-        print(model_1.summary())
+        # print("Model 1: Probit model for zero versus positive medical expenses")
+        # print(lasso_log_model_1.summary())
         print("\nModel 2: Probit model for having zero versus positive inpatient expense, given positive use of medical services")
-        print(model_2.summary())
+        # print(lasso_log_model_2.summary())
         print("\nModel 3: OLS regression for log of positive medical expenses if only outpatient services are used")
         print(model_3.summary())
         print("\nModel 4: OLS regression for log of medical expenses for those with any inpatient expenses")
