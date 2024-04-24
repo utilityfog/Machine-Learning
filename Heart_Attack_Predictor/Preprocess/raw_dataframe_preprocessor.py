@@ -398,7 +398,7 @@ class HEART:
         return processed_df
 
 class oos_testing:
-    def split_test_train_data(df, target_column, test_size=0.2, random_state=42):
+    def split_test_train_data(self, df, target_column, test_size=0.2, random_state=42):
         """
         Perform out-of-sample testing by dividing the dataset into training and testing data.
         """
