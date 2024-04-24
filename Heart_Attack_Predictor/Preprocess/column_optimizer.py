@@ -15,10 +15,10 @@ from scipy.stats import pearsonr
 
 from typing import List
 
-from .raw_dataframe_preprocessor import FINAL_RANDHIE_REGRESSORS, FINAL_RANDHIE_Y
+from .raw_dataframe_preprocessor import FINAL_RANDHIE_REGRESSORS, FINAL_HEART_REGRESSORS, save_dataframe
 
 class ColumnRearranger:
-    def return_optimal_rearrangement(self, df_left, df_right, X_left=FINAL_RANDHIE_REGRESSORS, X_right=[]) -> pd.DataFrame:
+    def return_optimal_rearrangement(self, df_left, df_right, X_left=FINAL_RANDHIE_REGRESSORS, X_right=FINAL_HEART_REGRESSORS) -> pd.DataFrame:
         """
         function that receives both the left and right dataframes as well as a list of regressors for each, rearranges the columns of the right dataframe
         such that it best aligns with the column arrangement of the left dataframe and then returns the rearranged right dataframe.
@@ -65,5 +65,7 @@ class ColumnRearranger:
         # Rearrange columns according to the optimal assignment
         rearranged_columns = [X_right[idx] for idx in col_ind]
         rearranged_df_right = df_right[rearranged_columns].copy()
+        
+        save_dataframe(rearranged_df_right, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "heart_preprocessed_rearranged.csv")
 
         return rearranged_df_right
