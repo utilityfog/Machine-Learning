@@ -396,3 +396,18 @@ class HEART:
         FINAL_HEART_Y = ['filler']
         
         return processed_df
+
+class oos_testing:
+    def split_test_train_data(df, target_column, test_size=0.2, random_state=42):
+        """
+        Perform out-of-sample testing by dividing the dataset into training and testing data.
+        """
+        # Extract features (X) and target variable (y)
+        X = df.drop(columns=[target_column])
+        y = df[target_column]
+        
+        # Split the dataset into training and testing data
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=random_state)
+        
+        return X_train, X_test, y_train, y_test
+
