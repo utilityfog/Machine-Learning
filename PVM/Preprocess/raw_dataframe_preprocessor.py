@@ -4,6 +4,8 @@ import pandas as pd
 import numpy as np
 import torch
 import torch.nn as nn
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 from statsmodels.discrete.discrete_model import Probit
 from statsmodels.api import OLS
@@ -147,6 +149,35 @@ def save_dataframe(df, directory, filename):
     # Save the DataFrame as a CSV file
     df.to_csv(file_path, index=False)
     print(f"DataFrame saved successfully to {file_path}")
+    
+def plot_and_save_covariance_matrix(df, filename='covariance_matrix.png'):
+    """
+    Computes the covariance matrix of the columns in the given DataFrame, plots a heatmap of it,
+    and saves the plot as an image file.
+
+    Parameters:
+    - df (pd.DataFrame): The input DataFrame containing numeric data.
+    - filename (str): The name of the file to save the image.
+
+    Returns:
+    - None: The function saves the heatmap image of the covariance matrix.
+    """
+    if df.empty:
+        raise ValueError("The DataFrame is empty. Please provide a DataFrame with data.")
+    
+    # Calculate the covariance matrix
+    covariance_matrix = df.cov()
+    
+    # Create a heatmap of the covariance matrix
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(covariance_matrix, annot=True, fmt=".2f", cmap='coolwarm')
+    plt.title('Covariance Matrix Heatmap')
+    
+    # Save the plot to a file
+    plt.savefig(filename)
+    plt.close()  # Close the figure to free memory
+
+    print(f"Heatmap saved as {filename}")
 
 class RANDHIE:
     def original_preprocess(self, df_path):
@@ -277,10 +308,16 @@ class RANDHIE:
         y_list = ['log_med_exp', 'log_inpatient_exp', 'is_positive_med_exp', 'is_positive_inpatient_exp', 'is_only_outpatient_exp']
         X = processed_df.drop(y_list, axis=1)
         print(f"final randhie X: {X.head()}")
+        
+        # Final RANDHIE predictors
         X_list = list(X.columns)
         print(f"length of final randhie X: {len(X_list)}")
         # ['coins', 'person_type_adult', 'person_type_fchild', 'person_type_mchild', 'hlthg_0', 'hlthg_1', 'hlthf_0', 'hlthf_1', 'hlthp_0', 'hlthp_1', 'female_0', 'female_1', 'site_2', 'site_3', 'site_4', 'site_5', 'site_6', 'tookphys_0', 'tookphys_1', 'plan', 'xage', 'educdec', 'time', 'disea', 'physlm', 'mdeoff', 'lfam', 'lpi', 'logc', 'xghindx', 'linc', 'lnum', 'black', 'mhi']
         X = sm.add_constant(X)  # Adds an intercept term
+        
+        # DataFrame for final predictors of randhie dataset
+        save_dataframe(X, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed_X.csv")
+        plot_and_save_covariance_matrix(X)
         
         # Store both final X_list (order preserved) and final y variables in global lists
         global FINAL_RANDHIE_REGRESSORS 
@@ -289,7 +326,7 @@ class RANDHIE:
         FINAL_RANDHIE_Y = y_list
         
         # Check if final preprocessing has been done correctly; includes both X and y
-        save_dataframe(processed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed_final.csv")
+        save_dataframe(processed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", './Plots/randhie_covariance_matrix.png')
         
         # THREE EQUATION MODEL ACCORDING TO PAPER: Health Insurance and the Demand for Medical Care
 
@@ -323,7 +360,7 @@ class RANDHIE:
         print("\nModel 4: OLS regression for log of medical expenses for those with any inpatient expenses")
         print(model_4.summary())
         
-        return processed_df
+        return processed_df, X
     
     def average_by_unique_patient(self, df: pd.DataFrame, id_column: str, categorical_cols=[]):
         """
@@ -415,11 +452,14 @@ class HEART:
         # Drop unnecessary variables
         processed_df = processed_df.drop(['Patient ID', 'Blood Pressure', 'Income', 'Continent', 'Hemisphere'], axis=1)
 
-        # Define independent variables 
+        # Define independent variables
         X_list = list(processed_df.columns)
         X = processed_df[X_list]
         print(f"final heart X: {X.head()}")
         X = sm.add_constant(X)  # Adds an intercept term
+        
+        # Cov Matrix for final predictors of heart dataset
+        plot_and_save_covariance_matrix(X, filename='./Plots/heart_covariance_matrix.png')
         
         # Store both final X_list (order preserved) and final y variables in global lists
         global FINAL_HEART_REGRESSORS
@@ -429,8 +469,9 @@ class HEART:
         
         # Check if final preprocessing has been done correctly
         save_dataframe(processed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "heart_preprocessed_final.csv")
+        save_dataframe(X, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "heart_preprocessed_X.csv")
         
-        return processed_df
+        return processed_df, X
 
 class oos_testing:
     def split_test_train_data(self, df: pd.DataFrame, target_column, test_size=0.2, random_state=42):

@@ -105,36 +105,43 @@ class ColumnRearranger:
         # Initialize cost matrix with extra padding if necessary
         max_dim = max(n, m)
         cost_matrix = np.full((max_dim, max_dim), float('inf'))  # Initialize with high cost for padding
-
-        # Determine which columns are binary (assuming one-hot encoded variables)
-        binary_columns = [col for col in df_left.columns if df_left[col].dropna().isin([0, 1]).all()]
+        
+        # Identify categorical columns
+        categorical_columns = df_left.select_dtypes(include=['object']).columns.tolist()
 
         # Fill the cost matrix
         for i, col_left in enumerate(X_left):
             for j, col_right in enumerate(X_right):
                 y = df_left[col_left].values.ravel()  # Flatten y to 1D
-                if col_left in binary_columns:
-                    # Use logistic regression for binary outcomes
+                X = df_right[col_right].values.reshape(-1, 1)  # Reshape X to 2D
+
+                if col_left in categorical_columns and len(np.unique(y)) > 1:
+                    # Use logistic regression for categorical outcomes, ensuring y has more than one unique value
                     model = LogisticRegression(solver='lbfgs', max_iter=1000)
-                else:
-                    # Use linear regression for other types of data
+                    model.fit(X, y)
+                    prediction = model.predict_proba(X)[:, 1]  # Get probability for the positive class
+                elif len(np.unique(y)) > 1:
+                    # Use linear regression for non-categorical types of data, ensuring y has more than one unique value
                     model = LinearRegression()
-
-                model.fit(df_right[[col_right]], y)
-                prediction = model.predict(df_right[[col_right]])
-
-                # Check if y is constant
-                if np.std(y) == 0:
-                    corr = 0  # Cannot compute correlation when y is constant
-                elif col_left in binary_columns:
-                    corr, _ = pearsonr(prediction.flatten(), y)  # Use Pearson correlation for binary outcomes
+                    model.fit(X, y)
+                    prediction = model.predict(X)
                 else:
-                    corr, _ = pearsonr(prediction.flatten(), y)
+                    # If y is constant, no need to fit a model
+                    prediction = np.full_like(y, fill_value=np.mean(y))
+
+                # Check if prediction is constant
+                if np.std(prediction) == 0 or np.std(y) == 0:
+                    corr = 0  # Set correlation to 0 if prediction or y is constant
+                else:
+                    # Calculate correlation and handle any potential nan values
+                    corr, _ = pearsonr(prediction, y)
+                    if np.isnan(corr):
+                        corr = 0
 
                 # Fill the cost matrix, using only valid indices
                 if i < n and j < m:
                     cost_matrix[i, j] = -corr  # Negative correlation to minimize the cost
-
+                
         # Apply the Hungarian algorithm
         row_ind, col_ind = linear_sum_assignment(cost_matrix[:n, :m])  # Limit to the real dimensions
 
