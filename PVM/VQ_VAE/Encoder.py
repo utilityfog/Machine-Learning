@@ -37,8 +37,8 @@ class DataFrameEncoder:
         with torch.no_grad():
             for data in loader:
                 data = data.to(self.device)
-                _, _, _, encoding_indices = model(data)
-                encoded_vectors.append(encoding_indices.squeeze().cpu().numpy())
+                z, _ = model(data)  # We only use the encoded vector 'z' and ignore the reconstruction
+                encoded_vectors.append(z.squeeze().cpu().numpy())
 
         # Return encoded vectors as a new DataFrame column
         return df.assign(encoded_vector=encoded_vectors)

@@ -1,7 +1,13 @@
 import os
 import sys
+import numpy as np
 import pandas as pd
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import train_test_split
 import torch
+
+from sklearn.linear_model import LinearRegression
+import statsmodels.api as sm
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
 projects_directory = os.path.dirname(script_directory)
@@ -12,14 +18,14 @@ from VQ_VAE import Encoder, VQVAE
 from HNSW import Row_Matcher
 
 # HYPERPARAMETERS
-BATCH_SIZE = 1024
-NUM_TRAINING_UPDATES = 15000
+BATCH_SIZE = 512
+NUM_TRAINING_UPDATES = 2000
 
 NUM_HIDDENS = 128
 NUM_RESIDUAL_HIDDENS = 32
 NUM_RESIDUAL_LAYERS = 2
 
-EMBEDDING_DIM = 64
+EMBEDDING_DIM = 39
 NUM_EMBEDDINGS = 512
 
 COMMITMENT_COST = 0.25
@@ -79,37 +85,84 @@ def main():
     # Encode randhie and heart dataframes
     encoded_randhie_df, encoded_heart_df = encoder.load_and_encode_dataframes(randhie_X, heart_X_rearranged)
     
+    raw_dataframe_preprocessor.save_dataframe(encoded_randhie_df, os.getcwd()+"/PVM/Datasets", "randhie_predictors.csv")
     print(f"{encoded_randhie_df.head()}")
     
+    raw_dataframe_preprocessor.save_dataframe(encoded_heart_df, os.getcwd()+"/PVM/Datasets", "heart_predictors.csv")
     print(f"{encoded_heart_df.head()}")
+    
+    ############################
+    randhie_predictors_path = os.getcwd()+"/PVM/Datasets/randhie_predictors.csv"
+    randhie_predictors = encoded_randhie_df
+    # pd.read_csv(randhie_predictors_path)
+    
+    heart_predictors_path = os.getcwd()+"/PVM/Datasets/heart_predictors.csv"
+    heart_predictors = encoded_heart_df
+    # pd.read_csv(heart_predictors_path)
     
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     
-    row_matcher = Row_Matcher.RowMatcher()
-    
-    randhie_model = VQVAE.Model(39, NUM_HIDDENS,
-                NUM_EMBEDDINGS, EMBEDDING_DIM, 
-                COMMITMENT_COST).to(device)
+    randhie_model = VQVAE.Model(39, NUM_HIDDENS, EMBEDDING_DIM).to(device)
     randhie_model.load_state_dict(torch.load('randhie_model.pth'))
     randhie_model.eval()
     
-    heart_model = VQVAE.Model(54, NUM_HIDDENS,
-                NUM_EMBEDDINGS, EMBEDDING_DIM, 
-                COMMITMENT_COST).to(device)
+    heart_model = VQVAE.Model(54, NUM_HIDDENS, EMBEDDING_DIM).to(device)
     heart_model.load_state_dict(torch.load('heart_model.pth'))
     heart_model.eval()
     
-    # Create an HNSW index for the heart DataFrame using the heart model
-    heart_index = row_matcher.create_index(heart_model, encoded_heart_df, device=device)
-
-    # Retrieve similar rows
-    merged_df = row_matcher.retrieve_similar(encoded_randhie_df, encoded_heart_df, randhie_model, heart_index, device=device)
-
-    # Display results
-    print(merged_df.head())
+    ### Row Matching Logic
     
-    # Save
-    raw_dataframe_preprocessor.save_dataframe(merged_df, os.getcwd()+"/PVM/Datasets", "merged_predictors.csv")
+    row_matcher = Row_Matcher.RowMatcher()
+
+    def match_rows(randhie_df, heart_df):
+        row_matcher = Row_Matcher.RowMatcher()
+        return row_matcher.retrieve_similar(randhie_df, heart_df)
+    
+    # Perform row matching and store results
+    combined_data = match_rows(encoded_randhie_df, encoded_heart_df)
+
+    # Save and display results
+    combined_data.to_csv(os.getcwd() + "/PVM/Datasets/merged_predictors.csv")
+    print(combined_data.head())
+    
+    # FINAL REGRESSION!
+    # Final regression
+    final_randhie_regressors, final_heart_regressors, final_randhie_y, final_heart_y = raw_dataframe_preprocessor.return_final_variables()
+    
+    randhie_y = randhie_preprocessed[final_randhie_y]
+    
+    heart_y = heart_preprocessed[final_heart_y]
+    
+    predictors = final_randhie_regressors + ['Stress Level', 'Sedentary Hours Per Day', 'Obesity_1', 'Cholesterol']
+    print(f"Using predictors: {predictors}")  # Debug print
+
+    regression_results = {}
+
+    for target in randhie_y.columns:
+        print(f"Running regression for target: {target}")  # Debug print
+
+        X = combined_data[predictors]
+        y = randhie_y[target]
+        X_const = sm.add_constant(X)  # Add constant for intercept
+
+        X_train, X_test, y_train, y_test = train_test_split(X_const, y, test_size=0.2, random_state=42)
+
+        model = sm.OLS(y_train, X_train)
+        results = model.fit()
+
+        y_pred = results.predict(X_test)
+        mse = mean_squared_error(y_test, y_pred)
+
+        regression_results[target] = {
+            'Summary': results.summary(),
+            'MSE': mse
+        }
+
+    for target, data in regression_results.items():
+        print(f"Results for {target}:")
+        print(data['Summary'])
+        print(f"Mean Squared Error: {data['MSE']}")
+
 
 if __name__ == "__main__":
     main()

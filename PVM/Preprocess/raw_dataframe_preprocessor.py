@@ -440,8 +440,18 @@ class HEART:
         # Get Log Income
         df_cleaned['Log_Income'] = np.log(df_cleaned['Income'])
         
+        ### Seperate systolic and diastolic blood pressure into their own variables and create an interaction term.
+        # Split the 'Blood Pressure' column into 'Systolic' and 'Diastolic'
+        df_cleaned[['Systolic', 'Diastolic']] = df_cleaned['Blood Pressure'].str.split('/', expand=True).astype(int)
+        
+        # Create interaction term by multiplying Systolic and Diastolic pressures
+        df_cleaned['BP_Interaction'] = df_cleaned['Systolic'] * df_cleaned['Diastolic']
+        
+        # Drop unnecessary variables
+        df_cleaned.drop(['Patient ID', 'Blood Pressure', 'Income', 'Continent', 'Hemisphere'], axis=1, inplace=True)
+        
         # Standardize Numeric Columns: standardized_df = standardize_df(avg_df)
-        numeric_columns = HEART_NUMERIC_VARIABLES
+        numeric_columns = HEART_NUMERIC_VARIABLES + ['Systolic', 'Diastolic', 'BP_Interaction']
         categorical_columns = HEART_CATEGORICAL_VARIABLES
         standardized_df = standardize_dataframe(df_cleaned, numeric_columns, categorical_columns)
         print(f"STANDARDIZED - NEW: {standardized_df.head()}")
@@ -455,16 +465,6 @@ class HEART:
         # Replacing the heart df's categorical variables with one hot encoded variables
         processed_df = replace_encoded_categorical(standardized_df, encoded_df, categorical_columns)
         print(f"PROCESSED: {processed_df.head()}")
-        
-        ### Seperate systolic and diastolic blood pressure into their own variables and create an interaction term.
-        # Split the 'Blood Pressure' column into 'Systolic' and 'Diastolic'
-        processed_df[['Systolic', 'Diastolic']] = processed_df['Blood Pressure'].str.split('/', expand=True).astype(int)
-        
-        # Create interaction term by multiplying Systolic and Diastolic pressures
-        processed_df['BP_Interaction'] = processed_df['Systolic'] * processed_df['Diastolic']
-        
-        # Drop unnecessary variables
-        processed_df = processed_df.drop(['Patient ID', 'Blood Pressure', 'Income', 'Continent', 'Hemisphere'], axis=1)
 
         # Define independent variables
         X_list = list(processed_df.columns)

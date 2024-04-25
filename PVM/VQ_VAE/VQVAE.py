@@ -32,14 +32,14 @@ make_grid = utils.make_grid
 ### Re-Implementation of Aäron van den Oord's VQ VAE to suit tabular data instead of image data
 
 # HYPERPARAMETERS
-BATCH_SIZE = 1024
-NUM_TRAINING_UPDATES = 15000
+BATCH_SIZE = 512
+NUM_TRAINING_UPDATES = 2000
 
 NUM_HIDDENS = 128
 NUM_RESIDUAL_HIDDENS = 32
 NUM_RESIDUAL_LAYERS = 2
 
-EMBEDDING_DIM = 64
+EMBEDDING_DIM = 39
 NUM_EMBEDDINGS = 512
 
 COMMITMENT_COST = 0.25
@@ -68,17 +68,17 @@ class DataFramePreprocessor:
         randhie_sampler = WeightedRandomSampler(randhie_weights, num_samples=len(randhie_weights)*5, replacement=True)
 
         # Create DataLoader instances
-        randhie_training_loader = DataLoader(randhie_training_data, 
+        randhie_training_loader = DataLoader(randhie_training_data,
                                     batch_size=BATCH_SIZE,
-                                    # num_workers=4,
+                                    # num_workers=2,
                                     sampler=randhie_sampler,
-                                    pin_memory=True)
+                                    pin_memory=False)
 
         randhie_validation_loader = DataLoader(randhie_validation_data,
                                     batch_size=128,
-                                    # num_workers=4,
+                                    # num_workers=2,
                                     shuffle=True,
-                                    pin_memory=True)
+                                    pin_memory=False)
         
         # Compute the variance of the numerical data in the heart training dataset
         randhie_data_numeric = randhie_training_data.dataframe.select_dtypes(include=[np.number])
@@ -103,15 +103,15 @@ class DataFramePreprocessor:
         # Create DataLoader instances
         heart_training_loader = DataLoader(heart_training_data, 
                                     batch_size=BATCH_SIZE,
-                                    # num_workers=4,
+                                    # num_workers=2,
                                     sampler=heart_sampler,
-                                    pin_memory=True)
+                                    pin_memory=False)
 
         heart_validation_loader = DataLoader(heart_validation_data,
                                     batch_size=128,
-                                    # num_workers=4,
+                                    # num_workers=2,
                                     shuffle=True,
-                                    pin_memory=True)
+                                    pin_memory=False)
         
         # Compute the variance of the numerical data in the heart training dataset
         heart_data_numeric = heart_training_data.dataframe.select_dtypes(include=[np.number])
@@ -209,11 +209,22 @@ class ResidualStack(nn.Module):
             x = self._layers[i](x)
         return F.relu(x)
     
+# class Encoder(nn.Module):
+#     def __init__(self, num_features, num_hiddens, embedding_dim):
+#         super(Encoder, self).__init__()
+#         self.fc1 = nn.Linear(num_features, num_hiddens)
+#         self.fc2 = nn.Linear(num_hiddens, embedding_dim)  # Adjust to match embedding_dim
+
+#     def forward(self, x):
+#         x = F.relu(self.fc1(x))
+#         x = self.fc2(x)
+#         return x
+    
 class Encoder(nn.Module):
-    def __init__(self, num_features, num_hiddens, embedding_dim):
+    def __init__(self, num_features, num_hiddens, num_embeddings):
         super(Encoder, self).__init__()
         self.fc1 = nn.Linear(num_features, num_hiddens)
-        self.fc2 = nn.Linear(num_hiddens, embedding_dim)  # Adjust to match embedding_dim
+        self.fc2 = nn.Linear(num_hiddens, num_embeddings)  # Output matches embedding_dim
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
@@ -245,18 +256,29 @@ class Decoder(nn.Module):
 #         x_recon = self.decoder(quantized)
 #         return loss, x_recon, perplexity
     
+# class Model(nn.Module):
+#     def __init__(self, num_features, num_hiddens, num_embeddings, embedding_dim, commitment_cost):
+#         super(Model, self).__init__()
+#         self.encoder = Encoder(num_features, num_hiddens, embedding_dim)
+#         self.vq_vae = VectorQuantizer(num_embeddings, embedding_dim, commitment_cost)
+#         self.decoder = Decoder(embedding_dim, num_features)
+
+#     def forward(self, x):
+#         z = self.encoder(x)
+#         loss, quantized, perplexity, encoding_indices = self.vq_vae(z)
+#         x_recon = self.decoder(quantized)
+#         return loss, x_recon, perplexity, encoding_indices
+    
 class Model(nn.Module):
-    def __init__(self, num_features, num_hiddens, num_embeddings, embedding_dim, commitment_cost):
+    def __init__(self, num_features, num_hiddens, embedding_dim):
         super(Model, self).__init__()
         self.encoder = Encoder(num_features, num_hiddens, embedding_dim)
-        self.vq_vae = VectorQuantizer(num_embeddings, embedding_dim, commitment_cost)
         self.decoder = Decoder(embedding_dim, num_features)
 
     def forward(self, x):
         z = self.encoder(x)
-        loss, quantized, perplexity, encoding_indices = self.vq_vae(z)
-        x_recon = self.decoder(quantized)
-        return loss, x_recon, perplexity, encoding_indices
+        x_recon = self.decoder(z)
+        return z, x_recon
     
 class Trainer:
     def train(self):
@@ -275,39 +297,43 @@ class Trainer:
         device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
         
         ### Train VQ VAE for randhie
-        randhie_model = Model(39, NUM_HIDDENS,
-                NUM_EMBEDDINGS, EMBEDDING_DIM, 
-                COMMITMENT_COST).to(device)
+        # randhie_model = Model(39, NUM_HIDDENS,
+        #         NUM_EMBEDDINGS, EMBEDDING_DIM, 
+        #         COMMITMENT_COST).to(device)
+        # # Optimizer
+        # randhie_optimizer = optim.Adam(randhie_model.parameters(), lr=LEARNING_RATE, amsgrad=False)
+        
+        ### Train Encoder for randhie
+        randhie_model = Model(39, NUM_HIDDENS, EMBEDDING_DIM).to(device)
         # Optimizer
         randhie_optimizer = optim.Adam(randhie_model.parameters(), lr=LEARNING_RATE, amsgrad=False)
         
         randhie_model.train()
         randhie_train_res_recon_error = []
-        randhie_train_res_perplexity = []
+        # randhie_train_res_perplexity = []
 
         for i in xrange(NUM_TRAINING_UPDATES):
             data = next(iter(randhie_training_loader))
             data = data.to(device)
             randhie_optimizer.zero_grad()
 
-            vq_loss, data_recon, perplexity, _ = randhie_model.forward(data)
+            encoding, data_recon = randhie_model.forward(data)
             recon_error = F.mse_loss(data_recon, data) / randhie_variance
-            loss = recon_error + vq_loss
+            loss = recon_error
             loss.backward()
 
             randhie_optimizer.step()
             
             randhie_train_res_recon_error.append(recon_error.item())
-            randhie_train_res_perplexity.append(perplexity.item())
 
             if (i+1) % 100 == 0:
                 print('%d iterations' % (i+1))
                 print('recon_error: %.3f' % np.mean(randhie_train_res_recon_error[-100:]))
-                print('perplexity: %.3f' % np.mean(randhie_train_res_perplexity[-100:]))
+                # print('perplexity: %.3f' % np.mean(randhie_train_res_perplexity[-100:]))
                 print()
                 
         randhie_train_res_recon_error_smooth = savgol_filter(randhie_train_res_recon_error, 201, 7)
-        randhie_train_res_perplexity_smooth = savgol_filter(randhie_train_res_perplexity, 201, 7)
+        # randhie_train_res_perplexity_smooth = savgol_filter(randhie_train_res_perplexity, 201, 7)
         
         # Plot loss
         f = plt.figure(figsize=(16,8))
@@ -318,7 +344,7 @@ class Trainer:
         ax.set_xlabel('iteration')
 
         ax = f.add_subplot(1,2,2)
-        ax.plot(randhie_train_res_perplexity_smooth)
+        # ax.plot(randhie_train_res_perplexity_smooth)
         ax.set_title('Smoothed Average codebook usage (perplexity).')
         ax.set_xlabel('iteration')
         
@@ -332,7 +358,7 @@ class Trainer:
         randhie_valid_originals = randhie_valid_originals.to(device)
 
         # Run the batch through the model to get the reconstructions
-        _, randhie_valid_reconstructions, _, _ = randhie_model.forward(randhie_valid_originals)
+        _, randhie_valid_reconstructions = randhie_model.forward(randhie_valid_originals)
 
         # Convert tensors to dataframes
         randhie_valid_originals_df = tensor_to_df(randhie_valid_originals, randhie_columns)
@@ -359,39 +385,41 @@ class Trainer:
         plt.close()
         
         ### Train VQ VAE for heart
-        heart_model = Model(54, NUM_HIDDENS,
-                NUM_EMBEDDINGS, EMBEDDING_DIM, 
-                COMMITMENT_COST).to(device)
+        # heart_model = Model(54, NUM_HIDDENS,
+        #         NUM_EMBEDDINGS, EMBEDDING_DIM, 
+        #         COMMITMENT_COST).to(device)
+        # # Optimizer
+        # heart_optimizer = optim.Adam(heart_model.parameters(), lr=LEARNING_RATE, amsgrad=False)
+        heart_model = Model(54, NUM_HIDDENS, EMBEDDING_DIM).to(device)
         # Optimizer
         heart_optimizer = optim.Adam(heart_model.parameters(), lr=LEARNING_RATE, amsgrad=False)
         
         heart_model.train()
         heart_train_res_recon_error = []
-        heart_train_res_perplexity = []
+        # heart_train_res_perplexity = []
 
         for i in xrange(NUM_TRAINING_UPDATES):
             data = next(iter(heart_training_loader))
             data = data.to(device)
             heart_optimizer.zero_grad()
 
-            vq_loss, data_recon, perplexity, _ = heart_model.forward(data)
+            encoding, data_recon = heart_model.forward(data)
             recon_error = F.mse_loss(data_recon, data) / heart_variance
-            loss = recon_error + vq_loss
+            loss = recon_error
             loss.backward()
 
             heart_optimizer.step()
             
             heart_train_res_recon_error.append(recon_error.item())
-            heart_train_res_perplexity.append(perplexity.item())
 
             if (i+1) % 100 == 0:
                 print('%d iterations' % (i+1))
                 print('recon_error: %.3f' % np.mean(heart_train_res_recon_error[-100:]))
-                print('perplexity: %.3f' % np.mean(heart_train_res_perplexity[-100:]))
+                # print('perplexity: %.3f' % np.mean(heart_train_res_perplexity[-100:]))
                 print()
                 
         heart_train_res_recon_error_smooth = savgol_filter(heart_train_res_recon_error, 201, 7)
-        heart_train_res_perplexity_smooth = savgol_filter(heart_train_res_perplexity, 201, 7)
+        # heart_train_res_perplexity_smooth = savgol_filter(heart_train_res_perplexity, 201, 7)
         
         # Plot loss
         f = plt.figure(figsize=(16,8))
@@ -402,7 +430,7 @@ class Trainer:
         ax.set_xlabel('iteration')
 
         ax = f.add_subplot(1,2,2)
-        ax.plot(heart_train_res_perplexity_smooth)
+        # ax.plot(heart_train_res_perplexity_smooth)
         ax.set_title('Smoothed Average codebook usage (perplexity).')
         ax.set_xlabel('iteration')
         
@@ -416,7 +444,7 @@ class Trainer:
         heart_valid_originals = heart_valid_originals.to(device)
 
         # Run the batch through the model to get the reconstructions
-        _, heart_valid_reconstructions, _, _ = heart_model.forward(heart_valid_originals)
+        _, heart_valid_reconstructions = heart_model.forward(heart_valid_originals)
 
         # Convert tensors to dataframes
         heart_valid_originals_df = tensor_to_df(heart_valid_originals, heart_columns)
