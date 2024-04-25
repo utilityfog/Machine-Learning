@@ -26,8 +26,18 @@ FINAL_RANDHIE_Y = []
 FINAL_HEART_REGRESSORS = []
 FINAL_HEART_Y = []
 
+FINAL_RANDHIE_PREDICTOR_DATAFRAME = None
+FINAL_HEART_PREDICTOR_DATAFRAME = None
+
 def return_final_variables():
     return FINAL_RANDHIE_REGRESSORS, FINAL_HEART_REGRESSORS, FINAL_RANDHIE_Y, FINAL_HEART_Y
+
+def return_final_predictor_dataframes():
+    return FINAL_RANDHIE_PREDICTOR_DATAFRAME, FINAL_HEART_PREDICTOR_DATAFRAME
+
+def update_rearranged_final_predictor_dataframe(df):
+    global FINAL_HEART_PREDICTOR_DATAFRAME
+    FINAL_HEART_PREDICTOR_DATAFRAME = df
 
 def standardize_dataframe(df, numerical_columns, exclude_columns):
     """
@@ -325,6 +335,10 @@ class RANDHIE:
         global FINAL_RANDHIE_Y
         FINAL_RANDHIE_Y = y_list
         
+        # Store to global df
+        global FINAL_RANDHIE_PREDICTOR_DATAFRAME
+        FINAL_RANDHIE_PREDICTOR_DATAFRAME = X
+        
         # Check if final preprocessing has been done correctly; includes both X and y
         save_dataframe(processed_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed_final.csv")
         
@@ -466,6 +480,10 @@ class HEART:
         FINAL_HEART_REGRESSORS = X_list
         global FINAL_HEART_Y
         FINAL_HEART_Y = ['Heart Attack Risk']
+        
+        # Store to global df
+        global FINAL_HEART_PREDICTOR_DATAFRAME
+        FINAL_HEART_PREDICTOR_DATAFRAME = X
         
         # Check if final preprocessing has been done correctly
         save_dataframe(processed_df, os.getcwd()+"/PVM/Datasets", "heart_preprocessed_final.csv")

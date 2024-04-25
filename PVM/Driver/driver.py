@@ -7,6 +7,7 @@ projects_directory = os.path.dirname(script_directory)
 sys.path.append(projects_directory)
 
 from Preprocess import raw_dataframe_preprocessor, column_optimizer
+from VQ_VAE import Encoder
 
 def main():
     # randhie dataset path
@@ -44,8 +45,20 @@ def main():
     
     column_rearranger.visualize_comparison(average_correlation_pre, average_correlation_post)
     
+    # Update global df
+    raw_dataframe_preprocessor.update_rearranged_final_predictor_dataframe(heart_X_rearranged)
+    
     # Visualize if rearrangement was done correctly
-    raw_dataframe_preprocessor.save_dataframe(heart_X_rearranged, os.getcwd()+"/PVM/Datasets", "heart_preprocessed_X_rearranged.csv")
+    # raw_dataframe_preprocessor.save_dataframe(heart_X_rearranged, os.getcwd()+"/PVM/Datasets", "heart_preprocessed_X_rearranged.csv")
+    
+    encoder = Encoder.DataFrameEncoder()
+    # Train the models
+    encoder.train_and_assign_models()
+    # Save the models
+    encoder.save_model(encoder.randhie_model, 'randhie_model.pth')
+    encoder.save_model(encoder.heart_model, 'heart_model.pth')
+    # Encode randhie and heart dataframes
+    encoded_randhie_df, encoded_heart_df = encoder.load_and_encode_dataframes(randhie_X, heart_X_rearranged)
 
 if __name__ == "__main__":
     main()
