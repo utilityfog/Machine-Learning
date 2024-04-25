@@ -253,9 +253,9 @@ class RANDHIE:
         # Append newly constructed person_type
         new_categorical_columns.append('person_type')
         
-        # Drop the original 'child' and 'fchild' columns as no longer needed
-        standardized_df.drop(['child', 'fchild'], axis=1, inplace=True)
-        for item in ['child', 'fchild']:
+        # Drop unnecessary columns
+        standardized_df.drop(['child', 'fchild', 'coins'], axis=1, inplace=True)
+        for item in ['child', 'fchild', 'coins']:
             new_categorical_columns.remove(item)
         # Test 4
         save_dataframe(standardized_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed4.csv")
@@ -267,27 +267,33 @@ class RANDHIE:
         # Replacing the randhie df's categorical variables with one hot encoded variables
         processed_df = replace_encoded_categorical(standardized_df, encoded_df, new_categorical_columns)
         print(f"PROCESSED: {processed_df.head()}")
-        
-        # Check if final preprocessing has been done correctly
-        save_dataframe(processed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed_final.csv")
 
         # Define independent variables based on the paper's model and available data: 
             # Excluding variables that are known to be endogenous (e.g. if someone makes a lot of hospital visits, obviously it will have a positive causal relationship with their quantity demanded for medical care even if there are confounding variables that may affect the number of times they visit the hospital)
             # Excluding variables that are a deterministic function of another to prevent perfect multicolinearity; no inclusion of both linc and income
             # We use one hot encoding instead of dummy encoding because vectorization is affected by that choice. We want to capture maximum information for each vectorized row
-        X_list = ['person_type_adult', 'person_type_fchild', 'person_type_mchild', 'hlthg_0', 'hlthg_1', 'hlthf_0',	'hlthf_1', 'hlthp_0', 'hlthp_1', 'female_0', 'female_1', 'site_2', 'site_3', 'site_4', 'site_5', 'site_6', 'tookphys_0', 'tookphys_1', 'plan', 'xage', 'educdec', 'time', 'disea', 'physlm', 'mdeoff', 'lfam', 'lpi', 'logc', 'xghindx', 'linc', 'lnum', 'black', 'mhi']
-        X = processed_df[X_list]
-        # print(f"randhie final X: {X}") # The ordering of the columns specified in X_list must be preserved!!
+        processed_df.drop(['income', 'year', 'outpdol', 'drugdol', 'suppdol', 'mentdol', 'inpdol', 'meddol', 'totadm', 'num', 'ghindx', 'logc', 'fmde', 'lnmeddol', 'binexp', 'zper'], axis=1, inplace=True)
+        print(f"processed_df columns: {list(processed_df.columns)}")
+        y_list = ['log_med_exp', 'log_inpatient_exp', 'is_positive_med_exp', 'is_positive_inpatient_exp', 'is_only_outpatient_exp']
+        X = processed_df.drop(y_list, axis=1)
+        print(f"final randhie X: {X.head()}")
+        X_list = list(X.columns)
+        print(f"length of final randhie X: {len(X_list)}")
+        # ['coins', 'person_type_adult', 'person_type_fchild', 'person_type_mchild', 'hlthg_0', 'hlthg_1', 'hlthf_0', 'hlthf_1', 'hlthp_0', 'hlthp_1', 'female_0', 'female_1', 'site_2', 'site_3', 'site_4', 'site_5', 'site_6', 'tookphys_0', 'tookphys_1', 'plan', 'xage', 'educdec', 'time', 'disea', 'physlm', 'mdeoff', 'lfam', 'lpi', 'logc', 'xghindx', 'linc', 'lnum', 'black', 'mhi']
         X = sm.add_constant(X)  # Adds an intercept term
         
         # Store both final X_list (order preserved) and final y variables in global lists
         global FINAL_RANDHIE_REGRESSORS 
         FINAL_RANDHIE_REGRESSORS = X_list
         global FINAL_RANDHIE_Y
-        FINAL_RANDHIE_Y = ['is_positive_med_exp', 'is_positive_inpatient_exp', 'log_med_exp', 'log_inpatient_exp']
+        FINAL_RANDHIE_Y = y_list
+        
+        # Check if final preprocessing has been done correctly; includes both X and y
+        save_dataframe(processed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed_final.csv")
         
         # THREE EQUATION MODEL ACCORDING TO PAPER: Health Insurance and the Demand for Medical Care
 
+        ### REMOVED due to all instances of is_positive_med_exp only being 1 after being preprocessed; this is anticipated as we are have summarized 5 years of data into 1
         # # Equation 1: Lasso model for zero versus positive medical expenses
         # # model_1 = Probit(processed_df['is_positive_med_exp_1'], X).fit() # LASSO
         # lasso_log_model_1 = LogisticRegression(penalty='l1', solver='liblinear')
@@ -412,6 +418,7 @@ class HEART:
         # Define independent variables 
         X_list = list(processed_df.columns)
         X = processed_df[X_list]
+        print(f"final heart X: {X.head()}")
         X = sm.add_constant(X)  # Adds an intercept term
         
         # Store both final X_list (order preserved) and final y variables in global lists
