@@ -15,8 +15,6 @@ from sklearn.compose import ColumnTransformer
 
 from .VQVAE import Trainer, DataFrameDataset
 
-from Preprocess.raw_dataframe_preprocessor import FINAL_RANDHIE_REGRESSORS, FINAL_RANDHIE_Y
-
 class DataFrameEncoder:
     def __init__(self):
         # Train and assign the randhie and heart VQ-VAE models
@@ -50,7 +48,7 @@ class DataFrameEncoder:
         torch.save(model.state_dict(), path)
 
     def load_and_encode_dataframes(self, randhie_df, heart_df):
-        # Load the trained models (this assumes the models have been saved after training)
+        # Load the trained models
         self.randhie_model.load_state_dict(torch.load('randhie_model.pth'))
         self.heart_model.load_state_dict(torch.load('heart_model.pth'))
 

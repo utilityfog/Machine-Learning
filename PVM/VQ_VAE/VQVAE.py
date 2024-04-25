@@ -32,7 +32,7 @@ make_grid = utils.make_grid
 ### Re-Implementation of Aäron van den Oord's VQ VAE to suit tabular data instead of image data
 
 # HYPERPARAMETERS
-BATCH_SIZE = 256
+BATCH_SIZE = 1024
 NUM_TRAINING_UPDATES = 15000
 
 NUM_HIDDENS = 128
@@ -69,12 +69,14 @@ class DataFramePreprocessor:
 
         # Create DataLoader instances
         randhie_training_loader = DataLoader(randhie_training_data, 
-                                    batch_size=BATCH_SIZE, 
+                                    batch_size=BATCH_SIZE,
+                                    # num_workers=4,
                                     sampler=randhie_sampler,
                                     pin_memory=True)
 
         randhie_validation_loader = DataLoader(randhie_validation_data,
-                                    batch_size=32,
+                                    batch_size=128,
+                                    # num_workers=4,
                                     shuffle=True,
                                     pin_memory=True)
         
@@ -100,12 +102,14 @@ class DataFramePreprocessor:
 
         # Create DataLoader instances
         heart_training_loader = DataLoader(heart_training_data, 
-                                    batch_size=BATCH_SIZE, 
+                                    batch_size=BATCH_SIZE,
+                                    # num_workers=4,
                                     sampler=heart_sampler,
                                     pin_memory=True)
 
         heart_validation_loader = DataLoader(heart_validation_data,
-                                    batch_size=32,
+                                    batch_size=128,
+                                    # num_workers=4,
                                     shuffle=True,
                                     pin_memory=True)
         
@@ -268,7 +272,7 @@ class Trainer:
         randhie_columns, heart_columns, _, _ = raw_dataframe_preprocessor.return_final_variables()
         randhie_training_loader, randhie_validation_loader, heart_training_loader, heart_validation_loader, randhie_variance, heart_variance = dataframe_preprocessor.load_and_split()
         
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
         
         ### Train VQ VAE for randhie
         randhie_model = Model(39, NUM_HIDDENS,
@@ -319,6 +323,9 @@ class Trainer:
         ax.set_xlabel('iteration')
         
         randhie_model.eval()
+        
+        # Save the plot to a file
+        plt.savefig('./PVM/Plots/randhie_nmse.png')
 
         # Get a batch of validation data
         randhie_valid_originals = next(iter(randhie_validation_loader))
@@ -344,15 +351,19 @@ class Trainer:
             axes[i, 1].set_title(f'Reconstructed Row {i}')
             axes[i, 1].bar(randhie_valid_reconstructions_df.columns, randhie_valid_reconstructions_df.iloc[i], color='orange')
 
-        plt.tight_layout()
-        plt.show()
+        # plt.tight_layout()
+        # plt.show()
+        
+        # Save the plot to a file
+        plt.savefig('./PVM/Plots/randhie_recon.png')
+        plt.close()
         
         ### Train VQ VAE for heart
         heart_model = Model(54, NUM_HIDDENS,
                 NUM_EMBEDDINGS, EMBEDDING_DIM, 
                 COMMITMENT_COST).to(device)
         # Optimizer
-        heart_optimizer = optim.Adam(randhie_model.parameters(), lr=LEARNING_RATE, amsgrad=False)
+        heart_optimizer = optim.Adam(heart_model.parameters(), lr=LEARNING_RATE, amsgrad=False)
         
         heart_model.train()
         heart_train_res_recon_error = []
@@ -397,6 +408,9 @@ class Trainer:
         
         heart_model.eval()
         
+        # Save the plot to a file
+        plt.savefig('./PVM/Plots/heart_nmse.png')
+        
         # Get a batch of validation data
         heart_valid_originals = next(iter(heart_validation_loader))
         heart_valid_originals = heart_valid_originals.to(device)
@@ -421,7 +435,11 @@ class Trainer:
             axes[i, 1].set_title(f'Reconstructed Row {i}')
             axes[i, 1].bar(heart_valid_reconstructions_df.columns, heart_valid_originals_df.iloc[i], color='orange')
 
-        plt.tight_layout()
-        plt.show()
+        # plt.tight_layout()
+        # plt.show()
+        
+        # Save the plot to a file
+        plt.savefig('./PVM/Plots/heart_recon.png')
+        plt.close()
         
         return device, randhie_model, heart_model

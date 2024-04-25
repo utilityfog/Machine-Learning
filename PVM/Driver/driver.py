@@ -1,13 +1,32 @@
 import os
 import sys
 import pandas as pd
+import torch
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
 projects_directory = os.path.dirname(script_directory)
 sys.path.append(projects_directory)
 
 from Preprocess import raw_dataframe_preprocessor, column_optimizer
-from VQ_VAE import Encoder
+from VQ_VAE import Encoder, VQVAE
+from HNSW import Row_Matcher
+
+# HYPERPARAMETERS
+BATCH_SIZE = 1024
+NUM_TRAINING_UPDATES = 15000
+
+NUM_HIDDENS = 128
+NUM_RESIDUAL_HIDDENS = 32
+NUM_RESIDUAL_LAYERS = 2
+
+EMBEDDING_DIM = 64
+NUM_EMBEDDINGS = 512
+
+COMMITMENT_COST = 0.25
+
+DECAY = 0.99
+
+LEARNING_RATE = 1e-3
 
 def main():
     # randhie dataset path
@@ -43,13 +62,13 @@ def main():
     average_correlation_post = column_rearranger.compute_average_correlation(randhie_X, heart_X_rearranged)
     print(f"post operation average correlation: {average_correlation_post}")
     
-    # column_rearranger.visualize_comparison(average_correlation_pre, average_correlation_post)
+    column_rearranger.visualize_comparison(average_correlation_pre, average_correlation_post)
     
     # Update global df
     raw_dataframe_preprocessor.update_rearranged_final_predictor_dataframe(heart_X_rearranged)
     
     # Visualize if rearrangement was done correctly
-    # raw_dataframe_preprocessor.save_dataframe(heart_X_rearranged, os.getcwd()+"/PVM/Datasets", "heart_preprocessed_X_rearranged.csv")
+    raw_dataframe_preprocessor.save_dataframe(heart_X_rearranged, os.getcwd()+"/PVM/Datasets", "heart_preprocessed_X_rearranged.csv")
     
     encoder = Encoder.DataFrameEncoder()
     # Train the models
@@ -63,6 +82,34 @@ def main():
     print(f"{encoded_randhie_df.head()}")
     
     print(f"{encoded_heart_df.head()}")
+    
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    
+    row_matcher = Row_Matcher.RowMatcher()
+    
+    randhie_model = VQVAE.Model(39, NUM_HIDDENS,
+                NUM_EMBEDDINGS, EMBEDDING_DIM, 
+                COMMITMENT_COST).to(device)
+    randhie_model.load_state_dict(torch.load('randhie_model.pth'))
+    randhie_model.eval()
+    
+    heart_model = VQVAE.Model(54, NUM_HIDDENS,
+                NUM_EMBEDDINGS, EMBEDDING_DIM, 
+                COMMITMENT_COST).to(device)
+    heart_model.load_state_dict(torch.load('heart_model.pth'))
+    heart_model.eval()
+    
+    # Create an HNSW index for the heart DataFrame using the heart model
+    heart_index = row_matcher.create_index(heart_model, encoded_heart_df, device=device)
+
+    # Retrieve similar rows
+    merged_df = row_matcher.retrieve_similar(encoded_randhie_df, encoded_heart_df, randhie_model, heart_index, device=device)
+
+    # Display results
+    print(merged_df.head())
+    
+    # Save
+    raw_dataframe_preprocessor.save_dataframe(merged_df, os.getcwd()+"/PVM/Datasets", "merged_predictors.csv")
 
 if __name__ == "__main__":
     main()

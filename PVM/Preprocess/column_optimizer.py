@@ -177,7 +177,7 @@ class ColumnRearranger:
             plt.text(pos, value + 0.01, f"{value:.2f}", ha='center', va='bottom')
         
         # Display the plot
-        plt.show()
+        plt.show(block=False)
         
         # Save the plot to a file
         plt.savefig('./PVM/Plots/column_rearrangement_test.png')
