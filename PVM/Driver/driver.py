@@ -43,7 +43,7 @@ def main():
     average_correlation_post = column_rearranger.compute_average_correlation(randhie_X, heart_X_rearranged)
     print(f"post operation average correlation: {average_correlation_post}")
     
-    column_rearranger.visualize_comparison(average_correlation_pre, average_correlation_post)
+    # column_rearranger.visualize_comparison(average_correlation_pre, average_correlation_post)
     
     # Update global df
     raw_dataframe_preprocessor.update_rearranged_final_predictor_dataframe(heart_X_rearranged)
@@ -59,6 +59,10 @@ def main():
     encoder.save_model(encoder.heart_model, 'heart_model.pth')
     # Encode randhie and heart dataframes
     encoded_randhie_df, encoded_heart_df = encoder.load_and_encode_dataframes(randhie_X, heart_X_rearranged)
+    
+    print(f"{encoded_randhie_df.head()}")
+    
+    print(f"{encoded_heart_df.head()}")
 
 if __name__ == "__main__":
     main()
