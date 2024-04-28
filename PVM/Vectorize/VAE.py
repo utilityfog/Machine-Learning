@@ -34,32 +34,35 @@ make_grid = utils.make_grid
 # HYPERPARAMETERS
 BATCH_SIZE = 512
 NUM_TRAINING_UPDATES = 2000
-
 NUM_HIDDENS = 128
-NUM_RESIDUAL_HIDDENS = 32
-NUM_RESIDUAL_LAYERS = 2
-
 EMBEDDING_DIM = 39
-NUM_EMBEDDINGS = 512
-
-COMMITMENT_COST = 0.25
-
-DECAY = 0.99
-
 LEARNING_RATE = 1e-3
 
+# Obsolete
+NUM_RESIDUAL_HIDDENS = 32
+NUM_RESIDUAL_LAYERS = 2
+NUM_EMBEDDINGS = 512
+COMMITMENT_COST = 0.25
+DECAY = 0.99
+
+def return_hyperparameters():
+    """Return current hyperparameters"""
+    return BATCH_SIZE, NUM_TRAINING_UPDATES, NUM_HIDDENS, EMBEDDING_DIM, LEARNING_RATE
+
 class DataFramePreprocessor:
-    def load_and_split(self):
+    def load_and_split(self, randhie_total_columns: pd.DataFrame, heart_predictor_columns: pd.DataFrame, heart_total_columns: pd.DataFrame):
         """
         This method must be called after the initial dataframe preprocessing stage!
         """
+        
+        final_randhie_regressors, final_heart_regressors, final_randhie_y, final_heart_y = raw_dataframe_preprocessor.return_final_variables()
+        
         ### RANDHIE
-        randhie_columns, heart_columns = raw_dataframe_preprocessor.return_final_predictor_dataframes()
-        randhie_train, randhie_validation = train_test_split(randhie_columns, test_size=0.25, random_state=42)
+        randhie_X_train, randhie_X_validation, randhie_y_train, randhie_y_validation = train_test_split(randhie_total_columns[final_randhie_regressors], randhie_total_columns[final_randhie_y], test_size=0.25, random_state=42)
         
         # Converting the split dataframes into datasets
-        randhie_training_data = DataFrameDataset(randhie_train)
-        randhie_validation_data = DataFrameDataset(randhie_validation)
+        randhie_training_data = DataFrameDataset(randhie_X_train)
+        randhie_validation_data = DataFrameDataset(randhie_X_validation)
         
         # Bootstrap due to lack of data: Create weights for each row for the WeightedRandomSampler
         randhie_weights = np.ones(len(randhie_training_data))
@@ -88,11 +91,11 @@ class DataFramePreprocessor:
         randhie_total_variance = np.var(randhie_data_flattened)
         
         ### HEART
-        heart_train, heart_validation = train_test_split(heart_columns, test_size=0.25, random_state=42)
+        heart_X_train, heart_X_validation, heart_y_train, heart_y_validation = train_test_split(heart_predictor_columns, heart_total_columns[final_heart_y], test_size=0.25, random_state=42)
         
         # Converting the split dataframes into datasets
-        heart_training_data = DataFrameDataset(heart_train)
-        heart_validation_data = DataFrameDataset(heart_validation)
+        heart_training_data = DataFrameDataset(heart_X_train)
+        heart_validation_data = DataFrameDataset(heart_X_validation)
         
         # Bootstrap due to lack of data: Create weights for each row for the WeightedRandomSampler
         heart_weights = np.ones(len(heart_training_data))
@@ -124,10 +127,10 @@ class DataFramePreprocessor:
 
 class DataFrameDataset(Dataset):
     """Custom Dataset for loading rows from a pandas DataFrame."""
-    def __init__(self, dataframe, transform=None):
+    def __init__(self, dataframe: pd.DataFrame, transform=None):
         """
         Args:
-            dataframe (pd.DataFrame): DataFrame with your data.
+            dataframe (pd.DataFrame): DataFrame
             transform (callable, optional): Optional transform to be applied on a sample.
         """
         self.dataframe = dataframe
@@ -209,17 +212,6 @@ class ResidualStack(nn.Module):
             x = self._layers[i](x)
         return F.relu(x)
     
-# class Encoder(nn.Module):
-#     def __init__(self, num_features, num_hiddens, embedding_dim):
-#         super(Encoder, self).__init__()
-#         self.fc1 = nn.Linear(num_features, num_hiddens)
-#         self.fc2 = nn.Linear(num_hiddens, embedding_dim)  # Adjust to match embedding_dim
-
-#     def forward(self, x):
-#         x = F.relu(self.fc1(x))
-#         x = self.fc2(x)
-#         return x
-    
 class Encoder(nn.Module):
     def __init__(self, num_features, num_hiddens, num_embeddings):
         super(Encoder, self).__init__()
@@ -243,32 +235,6 @@ class Decoder(nn.Module):
         x = self.fc2(x)
         return x
     
-# class Model(nn.Module):
-#     def __init__(self, num_features, num_hiddens, num_embeddings, embedding_dim, commitment_cost):
-#         super(Model, self).__init__()
-#         self.encoder = Encoder(num_features, num_hiddens, embedding_dim)
-#         self.vq_vae = VectorQuantizer(num_embeddings, embedding_dim, commitment_cost)
-#         self.decoder = Decoder(embedding_dim, num_features)
-
-#     def forward(self, x):
-#         z = self.encoder(x)
-#         loss, quantized, perplexity, _ = self.vq_vae(z)
-#         x_recon = self.decoder(quantized)
-#         return loss, x_recon, perplexity
-    
-# class Model(nn.Module):
-#     def __init__(self, num_features, num_hiddens, num_embeddings, embedding_dim, commitment_cost):
-#         super(Model, self).__init__()
-#         self.encoder = Encoder(num_features, num_hiddens, embedding_dim)
-#         self.vq_vae = VectorQuantizer(num_embeddings, embedding_dim, commitment_cost)
-#         self.decoder = Decoder(embedding_dim, num_features)
-
-#     def forward(self, x):
-#         z = self.encoder(x)
-#         loss, quantized, perplexity, encoding_indices = self.vq_vae(z)
-#         x_recon = self.decoder(quantized)
-#         return loss, x_recon, perplexity, encoding_indices
-    
 class Model(nn.Module):
     def __init__(self, num_features, num_hiddens, embedding_dim):
         super(Model, self).__init__()
@@ -281,9 +247,9 @@ class Model(nn.Module):
         return z, x_recon
     
 class Trainer:
-    def train(self):
+    def train(self, randhie_total_columns: pd.DataFrame, heart_predictor_columns: pd.DataFrame, heart_total_columns: pd.DataFrame):
         """
-        Pretrain VQ VAE
+        Pretrain VAE
         """
         # Helper function to convert tensors to dataframe
         def tensor_to_df(tensor, columns):
@@ -292,16 +258,11 @@ class Trainer:
         # Load data loaders for both randhie and heart
         dataframe_preprocessor = DataFramePreprocessor()
         randhie_columns, heart_columns, _, _ = raw_dataframe_preprocessor.return_final_variables()
-        randhie_training_loader, randhie_validation_loader, heart_training_loader, heart_validation_loader, randhie_variance, heart_variance = dataframe_preprocessor.load_and_split()
+        randhie_training_loader, randhie_validation_loader, heart_training_loader, heart_validation_loader, randhie_variance, heart_variance = dataframe_preprocessor.load_and_split(randhie_total_columns, heart_predictor_columns, heart_total_columns)
         
         device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
         
-        ### Train VQ VAE for randhie
-        # randhie_model = Model(39, NUM_HIDDENS,
-        #         NUM_EMBEDDINGS, EMBEDDING_DIM, 
-        #         COMMITMENT_COST).to(device)
-        # # Optimizer
-        # randhie_optimizer = optim.Adam(randhie_model.parameters(), lr=LEARNING_RATE, amsgrad=False)
+        ### Train VAE for randhie
         
         ### Train Encoder for randhie
         randhie_model = Model(39, NUM_HIDDENS, EMBEDDING_DIM).to(device)
@@ -310,7 +271,6 @@ class Trainer:
         
         randhie_model.train()
         randhie_train_res_recon_error = []
-        # randhie_train_res_perplexity = []
 
         for i in xrange(NUM_TRAINING_UPDATES):
             data = next(iter(randhie_training_loader))
@@ -329,11 +289,9 @@ class Trainer:
             if (i+1) % 100 == 0:
                 print('%d iterations' % (i+1))
                 print('recon_error: %.3f' % np.mean(randhie_train_res_recon_error[-100:]))
-                # print('perplexity: %.3f' % np.mean(randhie_train_res_perplexity[-100:]))
                 print()
                 
         randhie_train_res_recon_error_smooth = savgol_filter(randhie_train_res_recon_error, 201, 7)
-        # randhie_train_res_perplexity_smooth = savgol_filter(randhie_train_res_perplexity, 201, 7)
         
         # Plot loss
         f = plt.figure(figsize=(16,8))
@@ -344,7 +302,6 @@ class Trainer:
         ax.set_xlabel('iteration')
 
         ax = f.add_subplot(1,2,2)
-        # ax.plot(randhie_train_res_perplexity_smooth)
         ax.set_title('Smoothed Average codebook usage (perplexity).')
         ax.set_xlabel('iteration')
         
@@ -384,19 +341,15 @@ class Trainer:
         plt.savefig('./PVM/Plots/randhie_recon.png')
         plt.close()
         
-        ### Train VQ VAE for heart
-        # heart_model = Model(54, NUM_HIDDENS,
-        #         NUM_EMBEDDINGS, EMBEDDING_DIM, 
-        #         COMMITMENT_COST).to(device)
+        ### Train VAE for heart
+        
         # # Optimizer
-        # heart_optimizer = optim.Adam(heart_model.parameters(), lr=LEARNING_RATE, amsgrad=False)
         heart_model = Model(54, NUM_HIDDENS, EMBEDDING_DIM).to(device)
         # Optimizer
         heart_optimizer = optim.Adam(heart_model.parameters(), lr=LEARNING_RATE, amsgrad=False)
         
         heart_model.train()
         heart_train_res_recon_error = []
-        # heart_train_res_perplexity = []
 
         for i in xrange(NUM_TRAINING_UPDATES):
             data = next(iter(heart_training_loader))
@@ -415,11 +368,9 @@ class Trainer:
             if (i+1) % 100 == 0:
                 print('%d iterations' % (i+1))
                 print('recon_error: %.3f' % np.mean(heart_train_res_recon_error[-100:]))
-                # print('perplexity: %.3f' % np.mean(heart_train_res_perplexity[-100:]))
                 print()
                 
         heart_train_res_recon_error_smooth = savgol_filter(heart_train_res_recon_error, 201, 7)
-        # heart_train_res_perplexity_smooth = savgol_filter(heart_train_res_perplexity, 201, 7)
         
         # Plot loss
         f = plt.figure(figsize=(16,8))
@@ -430,7 +381,6 @@ class Trainer:
         ax.set_xlabel('iteration')
 
         ax = f.add_subplot(1,2,2)
-        # ax.plot(heart_train_res_perplexity_smooth)
         ax.set_title('Smoothed Average codebook usage (perplexity).')
         ax.set_xlabel('iteration')
         

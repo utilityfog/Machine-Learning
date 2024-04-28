@@ -13,7 +13,7 @@ from torchvision import transforms
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 
-from .VQVAE import Trainer, DataFrameDataset
+from .VAE import Trainer, DataFrameDataset
 
 class DataFrameEncoder:
     def __init__(self):
@@ -23,9 +23,9 @@ class DataFrameEncoder:
         self.randhie_model = None
         self.heart_model = None
 
-    def train_and_assign_models(self):
+    def train_and_assign_models(self, randhie_total_columns: pd.DataFrame, heart_predictor_columns: pd.DataFrame, heart_total_columns: pd.DataFrame):
         # Train and assign the randhie and heart VQ-VAE models
-        self.device, self.randhie_model, self.heart_model = self.trainer.train()
+        self.device, self.randhie_model, self.heart_model = self.trainer.train(randhie_total_columns, heart_predictor_columns, heart_total_columns)
 
     def encode_dataframe(self, df, model):
         """Encodes all rows in a dataframe using a trained VQ-VAE model."""

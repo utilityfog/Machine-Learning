@@ -439,7 +439,13 @@ disable=raw-checker-failed,
         invalid-name,
         redefined-outer-name,
         missing-class-docstring,
-        global-statement
+        global-statement,
+        protected-access,
+        pointless-string-statement,
+        unused-argument,
+        protected-access,
+        bare-except,
+        raise-missing-from
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option

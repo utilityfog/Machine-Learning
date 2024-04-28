@@ -41,7 +41,7 @@ class ColumnRearranger:
 
         return df_right_bootstrapped
     
-    def return_optimal_rearrangement(self, df_left, df_right):
+    def return_optimal_rearrangement(self, df_left, df_right) -> pd.DataFrame:
         """
         This function rearranges the columns of df_right to best align with the column arrangement of df_left.
         It uses linear regression for numeric predictors and logistic regression for categorical predictors.
