@@ -66,10 +66,10 @@ def run_model_pipeline_and_return_final_heart_predictors(heart_processor: raw_da
     # Define a dictionary to hold all the model prediction functions
     models = {
         'Lasso Logistic Regression': lasso_logistic_predict,
-        # 'Elastic Net Logistic Regression': elastic_net_logistic_predict,
-        # 'Support Vector Machine (RBF)': svm_rbf_predict,
-        # 'XGBoost': xgboost_predict,
-        # 'Simple Neural Network': simple_NN_predict,
+        'Elastic Net Logistic Regression': elastic_net_logistic_predict,
+        'Support Vector Machine (RBF)': svm_rbf_predict,
+        'XGBoost': xgboost_predict,
+        'Simple Neural Network': simple_NN_predict,
         'Transformer': transformer_predict
     }
 
@@ -405,11 +405,9 @@ def transformer_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd
     model.eval()
     with torch.no_grad():
         X_test_tensor = X_test_tensor.to(device)
-        # y_test_tensor = y_test_tensor.to(device)
-        
         predictions = model.forward(X_test_tensor)
-        # predictions_np = predictions.cpu().numpy()
-        # y_test_np = y_test_tensor.cpu().numpy()
-        auc_score = roc_auc_score(y_test_tensor, predictions)
+        predictions_unloaded = predictions.cpu()
+        y_test_unloaded = y_test_tensor.cpu()
+        auc_score = roc_auc_score(y_test_unloaded, predictions_unloaded)
 
     return model, {'auc': auc_score}
