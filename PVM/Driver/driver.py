@@ -1,13 +1,15 @@
+from multiprocessing import freeze_support
 import os
 import sys
 import numpy as np
 import pandas as pd
-from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import train_test_split
 import torch
+import torch.multiprocessing as mp
+import statsmodels.api as sm
 
 from sklearn.linear_model import LinearRegression
-import statsmodels.api as sm
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import train_test_split
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
 projects_directory = os.path.dirname(script_directory)
@@ -49,6 +51,8 @@ def main():
     # Reduce row number of heart table to match that of randhie via bootstrapping
     heart_X = column_rearranger.bootstrap_to_match(randhie_X, heart_X_whole_with_heartrisk)
     
+    raw_dataframe_preprocessor.save_dataframe(heart_X, os.getcwd()+"/PVM/Datasets", "heart_preprocessed_X.csv")
+    
     # pre-rearrangement
     average_correlation_pre = column_rearranger.compute_average_correlation(randhie_X, heart_X)
     print(f"pre operation average correlation: {average_correlation_pre}")
@@ -84,7 +88,8 @@ def main():
     raw_dataframe_preprocessor.save_dataframe(encoded_heart_df, os.getcwd()+"/PVM/Datasets", "heart_predictors.csv")
     print(f"{encoded_heart_df.head()}")
     
-    ### Probabilistic Vectorized Joining
+    ### Probabilistic Vectorized Matching
+    
     # randhie_predictors_path = os.getcwd()+"/PVM/Datasets/randhie_predictors.csv"
     # randhie_predictors = encoded_randhie_df
     # pd.read_csv(randhie_predictors_path)
@@ -95,14 +100,13 @@ def main():
     
     # HYPERPARAMETERS
     batch_size, num_training_updates, num_hiddens, embedding_dim, learning_rate = VAE.return_hyperparameters()
-    
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     
-    randhie_model = VAE.Model(39, num_hiddens, embedding_dim).to(device)
+    randhie_model = VAE.Model(31, num_hiddens, embedding_dim).to(device)
     randhie_model.load_state_dict(torch.load('randhie_model.pth'))
     randhie_model.eval()
     
-    heart_model = VAE.Model(54, num_hiddens, embedding_dim).to(device)
+    heart_model = VAE.Model(43, num_hiddens, embedding_dim).to(device)
     heart_model.load_state_dict(torch.load('heart_model.pth'))
     heart_model.eval()
 
@@ -129,4 +133,9 @@ def main():
     
 
 if __name__ == "__main__":
+    ### Multiprocessing for deep learning
+    try:
+        mp.set_start_method('spawn')  # can also try 'forkserver'
+    except RuntimeError:
+        pass
     main()

@@ -12,6 +12,7 @@ import scipy.signal as sg
 import statsmodels.api as sm
 import torch
 import torch.nn.functional as F
+import torch.multiprocessing as mp
 import torchvision
 import umap
 
@@ -32,10 +33,10 @@ make_grid = utils.make_grid
 ### Re-Implementation of Aäron van den Oord's VQ VAE to suit tabular data instead of image data
 
 # HYPERPARAMETERS
-BATCH_SIZE = 512
+BATCH_SIZE = 1024
 NUM_TRAINING_UPDATES = 2000
 NUM_HIDDENS = 128
-EMBEDDING_DIM = 39
+EMBEDDING_DIM = 31
 LEARNING_RATE = 1e-3
 
 # Obsolete
@@ -54,15 +55,16 @@ class DataFramePreprocessor:
         """
         This method must be called after the initial dataframe preprocessing stage!
         """
-        
-        final_randhie_regressors, final_heart_regressors, final_randhie_y, final_heart_y = raw_dataframe_preprocessor.return_final_variables()
+        # final_randhie_regressors, final_heart_regressors, final_randhie_y, final_heart_y = raw_dataframe_preprocessor.return_final_variables()
+        randhie_columns, heart_columns = raw_dataframe_preprocessor.return_final_predictor_dataframes()
         
         ### RANDHIE
-        randhie_X_train, randhie_X_validation, randhie_y_train, randhie_y_validation = train_test_split(randhie_total_columns[final_randhie_regressors], randhie_total_columns[final_randhie_y], test_size=0.25, random_state=42)
+        # randhie_X_train, randhie_X_validation, randhie_y_train, randhie_y_validation = train_test_split(randhie_total_columns[final_randhie_regressors], randhie_total_columns[final_randhie_y], test_size=0.25, random_state=42)
+        randhie_train, randhie_validation = train_test_split(randhie_columns, test_size=0.25, random_state=42)
         
         # Converting the split dataframes into datasets
-        randhie_training_data = DataFrameDataset(randhie_X_train)
-        randhie_validation_data = DataFrameDataset(randhie_X_validation)
+        randhie_training_data = DataFrameDataset(randhie_train)
+        randhie_validation_data = DataFrameDataset(randhie_validation)
         
         # Bootstrap due to lack of data: Create weights for each row for the WeightedRandomSampler
         randhie_weights = np.ones(len(randhie_training_data))
@@ -91,11 +93,12 @@ class DataFramePreprocessor:
         randhie_total_variance = np.var(randhie_data_flattened)
         
         ### HEART
-        heart_X_train, heart_X_validation, heart_y_train, heart_y_validation = train_test_split(heart_predictor_columns, heart_total_columns[final_heart_y], test_size=0.25, random_state=42)
+        # heart_X_train, heart_X_validation, heart_y_train, heart_y_validation = train_test_split(heart_predictor_columns, heart_total_columns[final_heart_y], test_size=0.25, random_state=42)
+        heart_train, heart_validation = train_test_split(heart_columns, test_size=0.25, random_state=42)
         
         # Converting the split dataframes into datasets
-        heart_training_data = DataFrameDataset(heart_X_train)
-        heart_validation_data = DataFrameDataset(heart_X_validation)
+        heart_training_data = DataFrameDataset(heart_train)
+        heart_validation_data = DataFrameDataset(heart_validation)
         
         # Bootstrap due to lack of data: Create weights for each row for the WeightedRandomSampler
         heart_weights = np.ones(len(heart_training_data))
@@ -127,7 +130,7 @@ class DataFramePreprocessor:
 
 class DataFrameDataset(Dataset):
     """Custom Dataset for loading rows from a pandas DataFrame."""
-    def __init__(self, dataframe: pd.DataFrame, transform=None):
+    def __init__(self, dataframe, transform=None):
         """
         Args:
             dataframe (pd.DataFrame): DataFrame
@@ -265,7 +268,7 @@ class Trainer:
         ### Train VAE for randhie
         
         ### Train Encoder for randhie
-        randhie_model = Model(39, NUM_HIDDENS, EMBEDDING_DIM).to(device)
+        randhie_model = Model(31, NUM_HIDDENS, EMBEDDING_DIM).to(device)
         # Optimizer
         randhie_optimizer = optim.Adam(randhie_model.parameters(), lr=LEARNING_RATE, amsgrad=False)
         
@@ -298,7 +301,7 @@ class Trainer:
         ax = f.add_subplot(1,2,1)
         ax.plot(randhie_train_res_recon_error_smooth)
         ax.set_yscale('log')
-        ax.set_title('Smoothed NMSE.')
+        ax.set_title('Smoothed NMSE Train')
         ax.set_xlabel('iteration')
 
         ax = f.add_subplot(1,2,2)
@@ -308,11 +311,11 @@ class Trainer:
         randhie_model.eval()
         
         # Save the plot to a file
-        plt.savefig('./PVM/Plots/randhie_nmse.png')
+        plt.savefig('./PVM/Plots/randhie_nmse_train.png')
 
         # Get a batch of validation data
-        randhie_valid_originals = next(iter(randhie_validation_loader))
-        randhie_valid_originals = randhie_valid_originals.to(device)
+        randhie_valid_originals = next(iter(randhie_validation_loader)).to(device)
+        # randhie_valid_originals = randhie_valid_originals.to(device)
 
         # Run the batch through the model to get the reconstructions
         _, randhie_valid_reconstructions = randhie_model.forward(randhie_valid_originals)
@@ -322,29 +325,29 @@ class Trainer:
         randhie_valid_reconstructions_df = tensor_to_df(randhie_valid_reconstructions, randhie_columns)
 
         # Visualization: Compare original and reconstructed values for the first n rows
-        n = 5  # Number of rows you want to visualize
+        n = 5
         fig, axes = plt.subplots(nrows=n, ncols=2, figsize=(20, 2*n))
 
         for i in range(n):
             # Original data visualization
-            axes[i, 0].set_title(f'Original Row {i}')
+            axes[i, 0].set_title(f'Original Row Validation {i}')
             axes[i, 0].bar(randhie_valid_originals_df.columns, randhie_valid_originals_df.iloc[i], color='blue')
             
             # Reconstructed data visualization
-            axes[i, 1].set_title(f'Reconstructed Row {i}')
+            axes[i, 1].set_title(f'Reconstructed Row Validation {i}')
             axes[i, 1].bar(randhie_valid_reconstructions_df.columns, randhie_valid_reconstructions_df.iloc[i], color='orange')
 
-        # plt.tight_layout()
+        plt.tight_layout()
         # plt.show()
         
         # Save the plot to a file
-        plt.savefig('./PVM/Plots/randhie_recon.png')
+        plt.savefig('./PVM/Plots/randhie_recon_validation.png')
         plt.close()
         
         ### Train VAE for heart
         
-        # # Optimizer
-        heart_model = Model(54, NUM_HIDDENS, EMBEDDING_DIM).to(device)
+        # Model
+        heart_model = Model(43, NUM_HIDDENS, EMBEDDING_DIM).to(device)
         # Optimizer
         heart_optimizer = optim.Adam(heart_model.parameters(), lr=LEARNING_RATE, amsgrad=False)
         
@@ -377,7 +380,7 @@ class Trainer:
         ax = f.add_subplot(1,2,1)
         ax.plot(heart_train_res_recon_error_smooth)
         ax.set_yscale('log')
-        ax.set_title('Smoothed NMSE.')
+        ax.set_title('Smoothed NMSE Train')
         ax.set_xlabel('iteration')
 
         ax = f.add_subplot(1,2,2)
@@ -387,11 +390,11 @@ class Trainer:
         heart_model.eval()
         
         # Save the plot to a file
-        plt.savefig('./PVM/Plots/heart_nmse.png')
+        plt.savefig('./PVM/Plots/heart_nmse_train.png')
         
         # Get a batch of validation data
-        heart_valid_originals = next(iter(heart_validation_loader))
-        heart_valid_originals = heart_valid_originals.to(device)
+        heart_valid_originals = next(iter(heart_validation_loader)).to(device)
+        # heart_valid_originals = heart_valid_originals.to(device)
 
         # Run the batch through the model to get the reconstructions
         _, heart_valid_reconstructions = heart_model.forward(heart_valid_originals)
@@ -406,18 +409,18 @@ class Trainer:
 
         for i in range(n):
             # Original data visualization
-            axes[i, 0].set_title(f'Original Row {i}')
+            axes[i, 0].set_title(f'Original Row Validation {i}')
             axes[i, 0].bar(heart_valid_originals_df.columns, heart_valid_originals_df.iloc[i], color='blue')
             
             # Reconstructed data visualization
-            axes[i, 1].set_title(f'Reconstructed Row {i}')
+            axes[i, 1].set_title(f'Reconstructed Row Validation {i}')
             axes[i, 1].bar(heart_valid_reconstructions_df.columns, heart_valid_originals_df.iloc[i], color='orange')
 
-        # plt.tight_layout()
+        plt.tight_layout()
         # plt.show()
         
         # Save the plot to a file
-        plt.savefig('./PVM/Plots/heart_recon.png')
+        plt.savefig('./PVM/Plots/heart_recon_validation.png')
         plt.close()
         
         return device, randhie_model, heart_model

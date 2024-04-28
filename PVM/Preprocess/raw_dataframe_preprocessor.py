@@ -94,7 +94,7 @@ def encode_categorical(df, categorical_vars):
     categorical_df = df[categorical_vars]
     
     # Perform one-hot encoding for categorical variables, drop first ensures there is no multicolinearity
-    result = pd.get_dummies(categorical_df, dtype=float, drop_first=False)
+    result = pd.get_dummies(categorical_df, dtype=float, drop_first=True)
     
     return result
 
@@ -254,13 +254,13 @@ class RANDHIE:
         df_cleaned = remove_nan_or_inf(df)
         print(f"DataFrame after removing NaN and inf values: {df_cleaned.head()}")
         # Test 0
-        save_dataframe(df_cleaned, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed0.csv")
+        # save_dataframe(df_cleaned, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed0.csv")
         
         # Average the numeric column values at the patient (zper) level since we are not interested in time and the RANDHIE experiment has 5 individual year observations for each patient
         collapsed_df = self.average_by_unique_patient(df_cleaned, "zper", RANDHIE_CATEGORICAL_VARIABLES)
         print(f"AVERAGED: {collapsed_df.head()}")
         # Test 1
-        save_dataframe(collapsed_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed1.csv")
+        # save_dataframe(collapsed_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed1.csv")
         
         # Re-Constructing Variables for the Four Equations from the Paper (must be done before standardization as it is affected by sign): ""
         collapsed_df['is_positive_med_exp'] = (collapsed_df['meddol'] > 0).astype(int)  # 1 if positive medical expenses, else 0
@@ -272,7 +272,7 @@ class RANDHIE:
         paper_variables_numeric = ['log_med_exp', 'log_inpatient_exp']
         print(f"processed_df's generated columns: {collapsed_df[paper_variables_numeric + paper_variables_categorical].head()}")
         # Test 2
-        save_dataframe(collapsed_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed2.csv")
+        # save_dataframe(collapsed_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed2.csv")
         
         # Standardize Numeric Columns: standardized_df = standardize_df(avg_df)
         new_numeric_columns = RANDHIE_NUMERIC_VARIABLES + paper_variables_numeric
@@ -282,7 +282,7 @@ class RANDHIE:
         # Add plan without standardization
         standardized_df['plan'] = collapsed_df['plan']
         # Test 3
-        save_dataframe(standardized_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed3.csv")
+        # save_dataframe(standardized_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed3.csv")
         
         # Combine standardized_df's child and fchild into one categorical column as they are redundant
         # Create a new categorical column combining 'child' and 'fchild'
@@ -301,7 +301,7 @@ class RANDHIE:
         for item in ['child', 'fchild', 'coins']:
             new_categorical_columns.remove(item)
         # Test 4
-        save_dataframe(standardized_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed4.csv")
+        # save_dataframe(standardized_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed4.csv")
         
         # One Hot Encoding categorical variables
         encoded_df = encode_categorical(standardized_df, new_categorical_columns)
@@ -454,13 +454,13 @@ class HEART:
         df_cleaned[['Systolic', 'Diastolic']] = df_cleaned['Blood Pressure'].str.split('/', expand=True).astype(int)
         
         # Create interaction term by multiplying Systolic and Diastolic pressures
-        df_cleaned['BP_Interaction'] = df_cleaned['Systolic'] * df_cleaned['Diastolic']
+        # df_cleaned['BP_Interaction'] = df_cleaned['Systolic'] * df_cleaned['Diastolic']
         
         # Drop unnecessary variables
         df_cleaned.drop(['Patient ID', 'Blood Pressure', 'Income', 'Continent', 'Hemisphere'], axis=1, inplace=True)
         
         # Standardize Numeric Columns: standardized_df = standardize_df(avg_df)
-        numeric_columns = HEART_NUMERIC_VARIABLES + ['Systolic', 'Diastolic', 'BP_Interaction']
+        numeric_columns = HEART_NUMERIC_VARIABLES + ['Systolic', 'Diastolic']
         categorical_columns = HEART_CATEGORICAL_VARIABLES
         standardized_df = standardize_dataframe(df_cleaned, numeric_columns, categorical_columns)
         print(f"STANDARDIZED - NEW: {standardized_df.head()}")

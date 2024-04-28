@@ -1,3 +1,4 @@
+from multiprocessing import freeze_support
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -5,6 +6,7 @@ import scipy.signal as sg
 import statsmodels.api as sm
 import torch
 import torch.nn.functional as F
+import torch.multiprocessing as mp
 import torchvision
 
 from sklearn import clone
@@ -64,10 +66,10 @@ def run_model_pipeline_and_return_final_heart_predictors(heart_processor: raw_da
     # Define a dictionary to hold all the model prediction functions
     models = {
         'Lasso Logistic Regression': lasso_logistic_predict,
-        'Elastic Net Logistic Regression': elastic_net_logistic_predict,
-        'Support Vector Machine (RBF)': svm_rbf_predict,
-        'XGBoost': xgboost_predict,
-        'Simple Neural Network': simple_NN_predict,
+        # 'Elastic Net Logistic Regression': elastic_net_logistic_predict,
+        # 'Support Vector Machine (RBF)': svm_rbf_predict,
+        # 'XGBoost': xgboost_predict,
+        # 'Simple Neural Network': simple_NN_predict,
         'Transformer': transformer_predict
     }
 
@@ -174,7 +176,7 @@ def cross_validate_and_ensemble(predict_func, heart_path: str, processor: raw_da
 def lasso_logistic_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.DataFrame, y_test: pd.DataFrame, fold_index):
     print("LASSO Logistic Prediction!")
     # Initialize Logistic Regression with L1 penalty (Lasso)
-    model = LogisticRegression(penalty='l1', solver='saga', max_iter=100)
+    model = LogisticRegression(penalty='l1', solver='saga', max_iter=1000)
     model.fit(X_train, np.ravel(y_train,order='C'))
     
     # Predict probabilities on the test set
@@ -193,7 +195,7 @@ def lasso_logistic_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test:
     plt.title('Coefficients of the Lasso Model')
     plt.xlabel('Features Index')
     plt.ylabel('Coefficient Value')
-    # plt.tight_layout()
+    plt.tight_layout()
     #plt.show()
     
     plt.savefig(f'./PVM/Plots/lasso_coef{fold_index}.png')
@@ -205,7 +207,7 @@ def elastic_net_logistic_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X
     print("Elastic Net Logistic Prediction!")
     # Setup ElasticNetCV with more iterations
     model = ElasticNetCV(cv=5, l1_ratio=np.linspace(0.01, 1, 100), alphas=np.logspace(-6, 2, 100), 
-                         max_iter=100, tol=0.0001, random_state=42)
+                         max_iter=500, tol=0.0001, random_state=42)
     
     model.fit(X_train, np.ravel(y_train,order='C'))
     
@@ -227,7 +229,7 @@ def elastic_net_logistic_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X
     plt.title('Coefficients of the Best Model')
     plt.xlabel('Features Index')
     plt.ylabel('Coefficient Value')
-    # plt.tight_layout()
+    plt.tight_layout()
     # plt.show()
     plt.savefig(f'./PVM/Plots/elastic_coef{fold_index}.png') 
     plt.close()
@@ -272,7 +274,7 @@ def xgboost_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.Dat
     plt.ylabel('Importance')
     plt.title('Feature Importances')
     plt.xticks(ticks=range(len(X_train.columns)), labels=X_train.columns, rotation=90)
-    # plt.tight_layout()
+    plt.tight_layout()
     # plt.show()
     
     plt.savefig(f'./PVM/Plots/XGBoost_Prediction{fold_index}.png') 
@@ -285,7 +287,7 @@ def xgboost_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.Dat
 
     return model, results
     
-def simple_NN_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.DataFrame, y_test: pd.DataFrame, X_train_tensor, y_train_tensor, X_test_tensor, y_test_tensor):
+def simple_NN_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.DataFrame, y_test: pd.DataFrame, X_train_tensor: torch.Tensor, y_train_tensor: torch.Tensor, X_test_tensor: torch.Tensor, y_test_tensor: torch.Tensor):
     print("Simple Neural Network Prediction!")
     # Retrieve hyperparameters
     batch_size, num_training_updates, num_hiddens, embedding_dim, learning_rate = VAE.return_hyperparameters()
@@ -332,21 +334,44 @@ def simple_NN_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.D
 
     return model, {'auc': auc_score}
     
-def transformer_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.DataFrame, y_test: pd.DataFrame, X_train_tensor, y_train_tensor, X_test_tensor, y_test_tensor):
+def transformer_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.DataFrame, y_test: pd.DataFrame, X_train_tensor: torch.Tensor, y_train_tensor: torch.Tensor, X_test_tensor: torch.Tensor, y_test_tensor: torch.Tensor):
     print("Transformer Prediction!")
     # Retrieve hyperparameters
     batch_size, num_training_updates, num_hiddens, embedding_dim, learning_rate = VAE.return_hyperparameters()
+    # print(f"X_train columns: {X_train.columns}")
+    
+    # Set device
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    
+    # Obsolete
+    # X_train_tensor = X_train_tensor.to(device)
+    # y_train_tensor = y_train_tensor.to(device).float().view(-1, 1)
+    # X_test_tensor = X_test_tensor.to(device)
+    # y_test_tensor = y_test_tensor.to(device).float().view(-1, 1)
+    
+    # Data tensors should be sent to the appropriate device and reshaped if necessary
+    X_train_tensor = X_train_tensor.cpu()
+    y_train_tensor = y_train_tensor.cpu().float().view(-1, 1)
+    X_test_tensor = X_test_tensor.cpu()
+    y_test_tensor = y_test_tensor.cpu().float().view(-1, 1)
 
-    # Data loader
-    train_dataset = TensorDataset(X_train_tensor, y_train_tensor.float().view(-1, 1))
+    train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    
+    if __name__ == '__main__':
+        freeze_support()
+        train_loader = DataLoader(
+            train_dataset, batch_size=batch_size, shuffle=True, num_workers=8
+        )
+    
+    # print("Fully read DataLoader!")
 
     # Transformer Model
     class TransformerModel(nn.Module):
         def __init__(self, input_dim, num_classes):
             super(TransformerModel, self).__init__()
             self.transformer_layer = nn.TransformerEncoderLayer(
-                d_model=input_dim, nhead=6, dropout=0.1, batch_first=True
+                d_model=input_dim, nhead=14, dropout=0.1, batch_first=True, device=device
             )
             self.transformer_encoder = nn.TransformerEncoder(self.transformer_layer, num_layers=1)
             self.classifier = nn.Linear(input_dim, num_classes)
@@ -357,7 +382,7 @@ def transformer_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd
             x = torch.mean(x, dim=0)  # Average pooling along the sequence dimension
             return torch.sigmoid(self.classifier(x))  # Use sigmoid for binary classification
 
-    model = TransformerModel(X_train_tensor.shape[1], 1)
+    model = TransformerModel(X_train_tensor.shape[1], 1).to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     criterion = nn.BCELoss()
 
@@ -365,16 +390,26 @@ def transformer_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd
     model.train()
     for epoch in range(num_training_updates):
         for data, target in train_loader:
+            # Move data to the device each batch
+            data = data.to(device)
+            target = target.to(device)
+            
             optimizer.zero_grad()
-            output = model(data)
-            loss = criterion(output, target)
+            output = model.forward(data)
+            loss = criterion(output, target)  # Ensure output and target shapes are aligned
+            print(f"transformer training loss: {loss}")
             loss.backward()
             optimizer.step()
 
-    # Evaluation
+    # Evaluate
     model.eval()
     with torch.no_grad():
-        predictions = model(X_test_tensor)
-        auc_score = roc_auc_score(y_test_tensor.view(-1, 1), predictions)
+        X_test_tensor = X_test_tensor.to(device)
+        # y_test_tensor = y_test_tensor.to(device)
+        
+        predictions = model.forward(X_test_tensor)
+        # predictions_np = predictions.cpu().numpy()
+        # y_test_np = y_test_tensor.cpu().numpy()
+        auc_score = roc_auc_score(y_test_tensor, predictions)
 
     return model, {'auc': auc_score}
