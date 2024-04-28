@@ -28,12 +28,14 @@ from xgboost import XGBClassifier
 from Preprocess import raw_dataframe_preprocessor
 from Vectorize import VAE
 
-def test_research_null(combined_data: pd.DataFrame, final_randhie_regressors, final_heart_regressors, final_randhie_y, final_heart_y):
+def test_research_null(combined_data: pd.DataFrame, final_randhie_regressors: pd.DataFrame, final_heart_regressors: pd.DataFrame, final_randhie_y: pd.DataFrame, final_heart_y: pd.DataFrame):
     """
         Summary: The results show that 
     """
     
-    predictors = final_randhie_regressors + ['Heart_Attack_Risk_Predicted', 'Stress Level', 'Sedentary Hours Per Day', 'Obesity_1', 'Cholesterol']
+    final_randhie_regressors[['Heart_Attack_Risk_Predicted', 'Stress Level', 'Sedentary Hours Per Day', 'Obesity_1', 'Cholesterol']] = final_heart_regressors[['Heart_Attack_Risk_Predicted', 'Stress Level', 'Sedentary Hours Per Day', 'Obesity_1', 'Cholesterol']]
+    
+    predictors = final_randhie_regressors
     print(f"Using predictors: {predictors}")
 
     regression_results = {}
@@ -291,12 +293,27 @@ def simple_NN_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.D
     print("Simple Neural Network Prediction!")
     # Retrieve hyperparameters
     batch_size, num_training_updates, num_hiddens, embedding_dim, learning_rate = VAE.return_hyperparameters()
+    
+    # Set device
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    
+    # Data tensors should be sent to the appropriate device and reshaped if necessary
+    X_train_tensor = X_train_tensor.cpu()
+    y_train_tensor = y_train_tensor.cpu().float().view(-1, 1)
+    X_test_tensor = X_test_tensor.cpu()
+    y_test_tensor = y_test_tensor.cpu().float().view(-1, 1)
 
     # Data loader
-    train_dataset = TensorDataset(X_train_tensor, y_train_tensor.float().view(-1, 1))  # Ensure target is [batch_size, 1]
+    train_dataset = TensorDataset(X_train_tensor, y_train_tensor)  # Ensure target is [batch_size, 1]
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    
+    if __name__ == '__main__':
+        freeze_support()
+        train_loader = DataLoader(
+            train_dataset, batch_size=batch_size, shuffle=True, num_workers=8
+        )
 
-    # Define the SimpleNN model
+    # SimpleNN model
     class SimpleNN(nn.Module):
         def __init__(self, input_dim):
             super(SimpleNN, self).__init__()
@@ -312,7 +329,7 @@ def simple_NN_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.D
             x = self.dropout(x)
             return torch.sigmoid(self.fc3(x))  # Sigmoid for binary classification
 
-    model = SimpleNN(X_train_tensor.shape[1])
+    model = SimpleNN(X_train_tensor.shape[1]).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     criterion = nn.BCELoss()
 
@@ -320,17 +337,26 @@ def simple_NN_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.D
     model.train()
     for epoch in range(num_training_updates):
         for data, target in train_loader:
+            # Move data to the device each batch
+            data = data.to(device)
+            target = target.to(device)
+            
             optimizer.zero_grad()
-            output = model(data)
+            output = model.forward(data)
             loss = criterion(output, target)
+            print(f"NN training loss: {loss}")
             loss.backward()
             optimizer.step()
 
     # Evaluation
     model.eval()
     with torch.no_grad():
-        predictions = model(X_test_tensor)
-        auc_score = roc_auc_score(y_test_tensor.view(-1, 1), predictions)  # Matching target shape [batch_size, 1]
+        X_test_tensor = X_test_tensor.to(device)
+        predictions = model.forward(X_test_tensor)
+        
+        predictions_unloaded = predictions.cpu()
+        y_test_unloaded = y_test_tensor.cpu()
+        auc_score = roc_auc_score(y_test_unloaded, predictions_unloaded)
 
     return model, {'auc': auc_score}
     
