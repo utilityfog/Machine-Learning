@@ -44,7 +44,7 @@ def test_research_null(combined_data: pd.DataFrame, final_randhie_regressors: pd
         print(f"Running regression for target: {target}")
 
         # IN Sample OLS regression to determine whether our new predictors have a linear correlation with quantity demanded for medical care, ceteribus paribus including effective price
-        X = combined_data[predictors]
+        X = predictors
         y = final_randhie_y[target]
         X_with_const = sm.add_constant(X)  # Add constant for the intercept term
 
@@ -293,6 +293,7 @@ def simple_NN_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.D
     print("Simple Neural Network Prediction!")
     # Retrieve hyperparameters
     batch_size, num_training_updates, num_hiddens, embedding_dim, learning_rate = VAE.return_hyperparameters()
+    num_training_updates -= 1000
     
     # Set device
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
@@ -305,13 +306,7 @@ def simple_NN_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.D
 
     # Data loader
     train_dataset = TensorDataset(X_train_tensor, y_train_tensor)  # Ensure target is [batch_size, 1]
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    
-    if __name__ == '__main__':
-        freeze_support()
-        train_loader = DataLoader(
-            train_dataset, batch_size=batch_size, shuffle=True, num_workers=8
-        )
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=16, persistent_workers=True)
 
     # SimpleNN model
     class SimpleNN(nn.Module):
@@ -344,7 +339,7 @@ def simple_NN_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.D
             optimizer.zero_grad()
             output = model.forward(data)
             loss = criterion(output, target)
-            print(f"NN training loss: {loss}")
+            # print(f"NN training loss: {loss}")
             loss.backward()
             optimizer.step()
 
@@ -365,6 +360,7 @@ def transformer_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd
     # Retrieve hyperparameters
     batch_size, num_training_updates, num_hiddens, embedding_dim, learning_rate = VAE.return_hyperparameters()
     # print(f"X_train columns: {X_train.columns}")
+    num_training_updates -= 1000
     
     # Set device
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
@@ -382,7 +378,7 @@ def transformer_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd
     y_test_tensor = y_test_tensor.cpu().float().view(-1, 1)
 
     train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=16, persistent_workers=True)
     
     if __name__ == '__main__':
         freeze_support()
